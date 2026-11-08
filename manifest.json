@@ -1,7 +1,7 @@
 {
-  "name": "明军的主页",
+  "name": "明军的生活助理",
   "short_name": "明军",
-  "description": "个人主页与随身工具：待办、便签、番茄钟",
+  "description": "个人生活助理：农历生日、重要事件、日历节日、日常课表、待办清单与账号记忆",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f4f5f1",

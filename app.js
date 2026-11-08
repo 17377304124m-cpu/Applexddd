@@ -49,44 +49,308 @@
   /* ================= 个人资料 ================= */
   var profile = store.get('profile', {
     name: '明军',
-    tagline: '保持好奇，持续行动',
-    bio: '这里是个人简介。点击右上角铅笔可以修改名字、签名和这段介绍，内容会保存在本地。'
+    tagline: '保持好奇，持续行动'
   });
 
   var nameEl = $('#profile-name');
   var taglineEl = $('#profile-tagline');
-  var bioEl = $('#profile-bio');
   var editBtn = $('#profile-edit-btn');
   var editing = false;
 
   function renderProfile() {
     nameEl.textContent = profile.name;
     taglineEl.textContent = profile.tagline;
-    bioEl.textContent = profile.bio;
-    document.title = profile.name + '的主页';
+    document.title = profile.name + '的生活助理';
   }
 
   editBtn.addEventListener('click', function () {
     if (!editing) {
       editing = true;
+      editBtn.title = '保存资料';
+      editBtn.setAttribute('aria-label', '保存资料');
       nameEl.innerHTML = '<input id="edit-name" class="editing-input" maxlength="20">';
       taglineEl.innerHTML = '<input id="edit-tagline" class="editing-input" maxlength="40">';
-      bioEl.innerHTML = '<textarea id="edit-bio" rows="4" maxlength="300"></textarea>';
       $('#edit-name').value = profile.name;
       $('#edit-tagline').value = profile.tagline;
-      $('#edit-bio').value = profile.bio;
       editBtn.classList.add('accent');
     } else {
       editing = false;
-      profile = {
-        name: $('#edit-name').value.trim() || profile.name,
-        tagline: $('#edit-tagline').value.trim(),
-        bio: $('#edit-bio').value.trim()
-      };
+      profile.name = $('#edit-name').value.trim() || profile.name;
+      profile.tagline = $('#edit-tagline').value.trim();
       store.set('profile', profile);
       renderProfile();
       editBtn.classList.remove('accent');
+      editBtn.title = '编辑资料';
+      editBtn.setAttribute('aria-label', '编辑资料');
     }
+  });
+
+  /* ================= 生活日历 ================= */
+  var calendarNow = new Date();
+  var calendarYear = calendarNow.getFullYear();
+  var calendarMonth = calendarNow.getMonth() + 1;
+  var calendarSelected = calendarNow.getDate();
+  var birthdays = store.get('birthdays', []);
+  var personalEvents = store.get('personalEvents', []);
+  var recordKind = 'birthday';
+
+  function renderCalendar() {
+    var today = new Date();
+    var todayKey = LifeCalendar.getDayInfo(today.getFullYear(), today.getMonth() + 1, today.getDate()).key;
+    var selected = LifeCalendar.getDayInfo(calendarYear, calendarMonth, calendarSelected);
+    var selectedEntries = LifeCalendar.getPersonalEntries(selected.key, birthdays, personalEvents);
+    $('#calendar-month').textContent = calendarYear + ' 年 ' + calendarMonth + ' 月';
+    var grid = $('#calendar-grid');
+    grid.setAttribute('aria-label', calendarYear + '年' + calendarMonth + '月日期');
+    grid.innerHTML = '';
+    LifeCalendar.getMonthDays(calendarYear, calendarMonth).forEach(function (info) {
+      if (!info) {
+        var blank = el('span', 'calendar-blank');
+        blank.setAttribute('aria-hidden', 'true');
+        grid.appendChild(blank);
+        return;
+      }
+      var button = el('button', 'calendar-day');
+      var personal = LifeCalendar.getPersonalEntries(info.key, birthdays, personalEvents);
+      button.type = 'button';
+      button.dataset.date = info.key;
+      button.classList.toggle('is-today', info.key === todayKey);
+      button.classList.toggle('is-selected', info.key === selected.key);
+      button.classList.toggle('is-weekend', info.weekday === 0 || info.weekday === 6);
+      button.classList.toggle('has-event', info.events.length > 0);
+      button.classList.toggle('has-personal', personal.length > 0);
+      button.setAttribute('aria-pressed', String(info.key === selected.key));
+      if (info.key === todayKey) button.setAttribute('aria-current', 'date');
+      var description = info.key + '，农历' + info.lunar;
+      if (info.events.length) description += '，' + info.events.join('、');
+      if (personal.length) description += '，' + personal.map(function (entry) { return entry.title; }).join('、');
+      if (info.holiday) description += '，' + info.holiday + '放假';
+      if (info.workday) description += '，调休补班';
+      button.setAttribute('aria-label', description);
+      var number = el('span', 'calendar-number');
+      number.textContent = info.day;
+      var label = el('span', 'calendar-day-label');
+      label.textContent = personal.length ? personal[0].title : info.events[0] || info.lunarShort;
+      button.appendChild(number);
+      button.appendChild(label);
+      if (info.holiday || info.workday) {
+        var badge = el('span', 'calendar-badge ' + (info.holiday ? 'badge-holiday' : 'badge-workday'));
+        badge.textContent = info.holiday ? '休' : '班';
+        button.appendChild(badge);
+      }
+      button.addEventListener('click', function () {
+        calendarSelected = info.day;
+        renderCalendar();
+        grid.querySelector('[data-date="' + info.key + '"]').focus({ preventScroll: true });
+      });
+      grid.appendChild(button);
+    });
+    var detail = $('#calendar-detail');
+    detail.innerHTML = '';
+    var heading = el('h4');
+    heading.textContent = calendarMonth + '月' + calendarSelected + '日 · 周' + '日一二三四五六'[selected.weekday];
+    if (selected.key === todayKey) heading.textContent += ' · 今天';
+    var lunar = el('p', 'calendar-lunar');
+    lunar.textContent = '农历 ' + selected.lunar;
+    var events = el('p', 'calendar-events');
+    events.textContent = selected.events.length ? selected.events.join(' · ') : '暂无安排';
+    var detailHeading = el('div', 'calendar-detail-heading');
+    detailHeading.appendChild(heading);
+    detailHeading.appendChild(lunar);
+    detail.appendChild(detailHeading);
+    if (selected.events.length || !selectedEntries.length) detail.appendChild(events);
+    if (selectedEntries.length) {
+      var dayList = el('ul', 'day-events');
+      selectedEntries.forEach(function (entry) {
+        var item = el('li');
+        var title = el('h5');
+        title.textContent = entry.title;
+        item.appendChild(title);
+        if (entry.note) {
+          var note = el('p');
+          note.textContent = entry.note;
+          item.appendChild(note);
+        }
+        dayList.appendChild(item);
+      });
+      detail.appendChild(dayList);
+    }
+    if (selected.holiday || selected.workday) {
+      var status = el('p', 'calendar-status');
+      status.textContent = selected.holiday ? selected.holiday + '假期 · 休息日' : '调休补班 · 工作日';
+      detail.appendChild(status);
+    }
+  }
+
+  function changeCalendarMonth(offset) {
+    var date = new Date(calendarYear, calendarMonth - 1 + offset, 1);
+    calendarYear = date.getFullYear();
+    calendarMonth = date.getMonth() + 1;
+    calendarSelected = 1;
+    renderCalendar();
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      $('#calendar-grid').animate([
+        { opacity: 0.3, transform: 'translateX(' + (offset > 0 ? 8 : -8) + 'px)' },
+        { opacity: 1, transform: 'translateX(0)' }
+      ], { duration: 180, easing: 'ease-out' });
+    }
+  }
+
+  $('#calendar-prev').addEventListener('click', function () { changeCalendarMonth(-1); });
+  $('#calendar-next').addEventListener('click', function () { changeCalendarMonth(1); });
+  $('#calendar-today').addEventListener('click', function () {
+    var today = new Date();
+    calendarYear = today.getFullYear();
+    calendarMonth = today.getMonth() + 1;
+    calendarSelected = today.getDate();
+    renderCalendar();
+  });
+
+  /* ================= 好友生日与事件 ================= */
+  LifeCalendar.lunarMonthNames.forEach(function (name, index) {
+    var option = el('option');
+    option.value = index + 1;
+    option.textContent = name;
+    $('#birthday-month').appendChild(option);
+  });
+  LifeCalendar.lunarDayNames.forEach(function (name, index) {
+    var option = el('option');
+    option.value = index + 1;
+    option.textContent = name;
+    $('#birthday-day').appendChild(option);
+  });
+
+  function jumpToCalendar(key) {
+    var parts = key.split('-').map(Number);
+    calendarYear = parts[0];
+    calendarMonth = parts[1];
+    calendarSelected = parts[2];
+    $('#life-dialog').close();
+    renderCalendar();
+    $('#calendar-grid').querySelector('[data-date="' + key + '"]').focus({ preventScroll: true });
+    $('.calendar-section').scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'
+    });
+  }
+
+  function renderPersonalRecords() {
+    var today = new Date();
+    var todayKey = LifeCalendar.getDayInfo(today.getFullYear(), today.getMonth() + 1, today.getDate()).key;
+    var query = $('#life-search').value.trim().toLocaleLowerCase();
+    var records = (recordKind === 'birthday' ? birthdays : personalEvents).map(function (record) {
+      var next = recordKind === 'birthday' ? LifeCalendar.nextBirthday(record, todayKey) : null;
+      var label = recordKind === 'birthday' ? LifeCalendar.birthdayLabel(record) : record.date;
+      return { record: record, date: next ? next.key : record.date, label: label };
+    }).filter(function (item) {
+      return [item.record.name, item.record.title, item.record.note, item.label, item.date].join(' ').toLocaleLowerCase().indexOf(query) !== -1;
+    }).sort(function (a, b) { return a.date.localeCompare(b.date); });
+    var list = $('#life-record-list');
+    list.innerHTML = '';
+    if (!records.length) {
+      var empty = el('li', 'life-hint');
+      empty.textContent = query ? '没有找到匹配的记录' : recordKind === 'birthday' ? '还没有好友生日，先添加一位吧。' : '还没有事件，先记下一件重要的事。';
+      list.appendChild(empty);
+    }
+    records.forEach(function (item) {
+      var record = item.record;
+      var row = el('li', 'life-record');
+      var heading = el('h3');
+      heading.textContent = record.name || record.title;
+      var meta = el('p');
+      meta.textContent = recordKind === 'birthday' ? item.label + '\n下次生日：' + item.date + (item.date === todayKey ? ' · 就是今天' : '') : '日期：' + item.date;
+      row.appendChild(heading);
+      row.appendChild(meta);
+      if (record.note) {
+        var note = el('p');
+        note.textContent = record.note;
+        row.appendChild(note);
+      }
+      var actions = el('div', 'life-record-actions');
+      var jump = el('button', 'btn');
+      jump.textContent = '查看日期';
+      jump.addEventListener('click', function () { jumpToCalendar(item.date); });
+      var remove = el('button', 'btn delete-record');
+      remove.textContent = '删除';
+      remove.setAttribute('aria-label', '删除' + (record.name || record.title));
+      remove.addEventListener('click', function () {
+        if (!confirm('确定删除“' + (record.name || record.title) + '”这条记录吗？')) return;
+        var key = recordKind === 'birthday' ? 'birthdays' : 'personalEvents';
+        var next = (recordKind === 'birthday' ? birthdays : personalEvents).filter(function (entry) { return entry.id !== record.id; });
+        if (!savePersonalRecords(key, next)) return;
+        if (recordKind === 'birthday') birthdays = next;
+        else personalEvents = next;
+        $('#life-feedback').textContent = '已删除记录';
+        renderPersonalRecords();
+        renderCalendar();
+      });
+      actions.appendChild(jump);
+      actions.appendChild(remove);
+      row.appendChild(actions);
+      list.appendChild(row);
+    });
+  }
+
+  function savePersonalRecords(key, records) {
+    try {
+      localStorage.setItem(key, JSON.stringify(records));
+      return true;
+    } catch (error) {
+      $('#life-feedback').textContent = '保存失败，请检查浏览器是否允许本地存储后重试。';
+      return false;
+    }
+  }
+
+  function openPersonalRecords(kind) {
+    recordKind = kind;
+    $('#life-dialog-title').textContent = kind === 'birthday' ? '好友生日' : '事件';
+    $('#birthday-form').hidden = kind !== 'birthday';
+    $('#event-form').hidden = kind !== 'event';
+    $('#life-search').value = '';
+    $('#life-feedback').textContent = '';
+    $('#event-date').value = LifeCalendar.getDayInfo(calendarYear, calendarMonth, calendarSelected).key;
+    renderPersonalRecords();
+    $('#life-dialog').showModal();
+    $(kind === 'birthday' ? '#birthday-name' : '#event-title').focus();
+  }
+
+  $('#birthday-open').addEventListener('click', function () { openPersonalRecords('birthday'); });
+  $('#event-open').addEventListener('click', function () { openPersonalRecords('event'); });
+  $('#life-close').addEventListener('click', function () { $('#life-dialog').close(); });
+  $('#life-search').addEventListener('input', renderPersonalRecords);
+
+  $('#birthday-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var name = $('#birthday-name').value.trim();
+    if (!name) { $('#life-feedback').textContent = '请填写好友姓名'; return; }
+    var record = {
+      id: crypto.randomUUID(), name: name,
+      month: Number($('#birthday-month').value), day: Number($('#birthday-day').value),
+      leap: $('#birthday-leap').checked, note: $('#birthday-note').value.trim()
+    };
+    var next = birthdays.concat([record]);
+    if (!savePersonalRecords('birthdays', next)) return;
+    birthdays = next;
+    event.target.reset();
+    $('#life-search').value = '';
+    $('#life-feedback').textContent = '已保存“' + name + '”的农历生日';
+    renderPersonalRecords();
+    renderCalendar();
+  });
+
+  $('#event-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var title = $('#event-title').value.trim();
+    if (!title) { $('#life-feedback').textContent = '请填写事件名称'; return; }
+    var record = { id: crypto.randomUUID(), title: title, date: $('#event-date').value, note: $('#event-note').value.trim() };
+    var next = personalEvents.concat([record]);
+    if (!savePersonalRecords('personalEvents', next)) return;
+    personalEvents = next;
+    event.target.reset();
+    $('#event-date').value = record.date;
+    $('#life-search').value = '';
+    $('#life-feedback').textContent = '已保存“' + title + '”';
+    renderPersonalRecords();
+    renderCalendar();
   });
 
   /* ================= 常用链接 ================= */
@@ -220,24 +484,45 @@
     { name: '战略管理', teacher: '余琨岳', day: 5, periods: [8, 9], weeks: weekRange(10, 12), room: 'A-208', color: 'green' }
   ];
 
-  var WEEK_MIN = 10, WEEK_MAX = 16;
+  var importedSchedule = store.get('importedSchedule', null);
+  if (importedSchedule && importedSchedule.version === 1 && Array.isArray(importedSchedule.courses) && importedSchedule.courses.length) {
+    COURSES = importedSchedule.courses;
+  }
+  var WEEK_MIN, WEEK_MAX;
+  function updateScheduleBounds() {
+    var weeks = [];
+    COURSES.forEach(function (course) { weeks = weeks.concat(course.weeks); });
+    WEEK_MIN = Math.min.apply(null, weeks);
+    WEEK_MAX = Math.max.apply(null, weeks);
+  }
+  updateScheduleBounds();
   var scheduleWeek = store.get('scheduleWeek', 10);
+  scheduleWeek = Math.min(WEEK_MAX, Math.max(WEEK_MIN, scheduleWeek));
   var jsDay = new Date().getDay(); // 0=周日
-  var scheduleDay = (jsDay >= 1 && jsDay <= 5) ? jsDay : 1;
+  var scheduleDay = jsDay || 7;
 
   function periodText(course) {
-    var first = course.periods[0];
-    var last = course.periods[course.periods.length - 1];
-    var range = course.periods.length > 1 ? '第' + first + '–' + last + '节' : '第' + first + '节';
-    return range + ' · ' + PERIODS[first].slice(0, 5) + '–' + PERIODS[last].slice(-5);
+    var groups = [];
+    course.periods.forEach(function (period) {
+      var previous = groups[groups.length - 1];
+      if (previous && period === previous[previous.length - 1] + 1) previous.push(period);
+      else groups.push([period]);
+    });
+    return groups.map(function (group) {
+      var first = group[0], last = group[group.length - 1];
+      var range = group.length > 1 ? '第' + first + '–' + last + '节' : '第' + first + '节';
+      return range + ' · ' + PERIODS[first].slice(0, 5) + '–' + PERIODS[last].slice(-5);
+    }).join('；');
   }
 
   function weeksText(weeks) {
-    return weeks.length > 1 ? '第' + weeks[0] + '–' + weeks[weeks.length - 1] + '周' : '仅第' + weeks[0] + '周';
+    return '第' + ScheduleImport.formatRanges(weeks) + '周';
   }
 
   function renderSchedule() {
     $('#week-label').textContent = '第' + scheduleWeek + '周';
+    $('#week-prev').disabled = scheduleWeek <= WEEK_MIN;
+    $('#week-next').disabled = scheduleWeek >= WEEK_MAX;
     document.querySelectorAll('.day-tabs .segment').forEach(function (seg) {
       seg.classList.toggle('active', parseInt(seg.dataset.day, 10) === scheduleDay);
     });
@@ -245,7 +530,7 @@
     list.innerHTML = '';
     var todays = COURSES.filter(function (c) {
       return c.day === scheduleDay && c.weeks.indexOf(scheduleWeek) !== -1;
-    });
+    }).sort(function (a, b) { return a.periods[0] - b.periods[0]; });
     if (!todays.length) {
       var emptyLi = el('li', 'schedule-empty');
       emptyLi.textContent = '这一天没有课';
@@ -258,7 +543,7 @@
       var name = el('div', 'course-name');
       name.textContent = c.name;
       var meta = el('div', 'item-meta');
-      meta.textContent = c.teacher + ' · ' + weeksText(c.weeks);
+      meta.textContent = (c.teacher ? c.teacher + ' · ' : '') + weeksText(c.weeks);
       var time = el('div', 'course-time');
       time.textContent = periodText(c);
       wrap.appendChild(name);
@@ -296,6 +581,20 @@
       scheduleDay = parseInt(seg.dataset.day, 10);
       renderSchedule();
     });
+  });
+
+  SchedulePhotoImport.init({
+    getCourses: function () { return COURSES; },
+    save: function (courses) {
+      localStorage.setItem('importedSchedule', JSON.stringify({ version: 1, courses: courses }));
+      COURSES = courses;
+      updateScheduleBounds();
+      scheduleWeek = Math.min(WEEK_MAX, Math.max(WEEK_MIN, scheduleWeek));
+      store.set('scheduleWeek', scheduleWeek);
+      $('#schedule-feedback').textContent = '课表已更新，共 ' + courses.length + ' 条课程。';
+      $('#schedule-feedback').hidden = false;
+      renderSchedule();
+    }
   });
 
   /* ================= 账号本 ================= */
@@ -493,6 +792,7 @@
 
   /* ================= 初始化 ================= */
   renderProfile();
+  renderCalendar();
   renderLinks();
   renderTodos();
   renderSchedule();
