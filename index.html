@@ -57,9 +57,9 @@
           <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
           <span>待办</span>
         </button>
-        <button class="segment" data-tool="note" role="tab" title="便签">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
-          <span>便签</span>
+        <button class="segment" data-tool="schedule" role="tab" title="课表">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <span>课表</span>
         </button>
         <button class="segment" data-tool="account" role="tab" title="账号本">
           <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -78,13 +78,26 @@
         <ul id="todo-list" class="item-list"></ul>
       </section>
 
-      <!-- 便签 -->
-      <section id="tool-note" class="tool-panel">
-        <form id="note-form" class="note-form">
-          <textarea id="note-input" rows="3" placeholder="随手记一笔…" maxlength="500" required></textarea>
-          <button type="submit" class="btn primary">保存便签</button>
-        </form>
-        <ul id="note-list" class="item-list"></ul>
+      <!-- 课表 -->
+      <section id="tool-schedule" class="tool-panel">
+        <div class="week-picker">
+          <button id="week-prev" class="icon-btn" title="上一周" aria-label="上一周">
+            <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <div id="week-label" class="week-label">第10周</div>
+          <button id="week-next" class="icon-btn" title="下一周" aria-label="下一周">
+            <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+        <div class="segmented day-tabs" role="tablist">
+          <button class="segment" data-day="1" role="tab">周一</button>
+          <button class="segment" data-day="2" role="tab">周二</button>
+          <button class="segment" data-day="3" role="tab">周三</button>
+          <button class="segment" data-day="4" role="tab">周四</button>
+          <button class="segment" data-day="5" role="tab">周五</button>
+        </div>
+        <ul id="schedule-list" class="item-list"></ul>
+        <p class="schedule-note">A 开头教室及 B-313 在1号公共教学楼；B412 在1栋公共实验楼。周末无课。</p>
       </section>
 
       <!-- 账号本 -->

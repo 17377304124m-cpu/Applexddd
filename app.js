@@ -193,42 +193,109 @@
     renderTodos();
   });
 
-  /* ================= 便签 ================= */
-  var notes = store.get('notes', []);
-  var noteList = $('#note-list');
+  /* ================= 课表 ================= */
+  var PERIODS = {
+    1: '08:20–09:00', 2: '09:05–09:45', 3: '09:55–10:35', 4: '10:40–11:20',
+    5: '11:25–12:05', 6: '14:30–15:10', 7: '15:15–15:55', 8: '16:05–16:45',
+    9: '16:50–17:30', 10: '19:30–20:10', 11: '20:15–20:55', 12: '21:00–21:40'
+  };
 
-  function renderNotes() {
-    noteList.innerHTML = '';
-    notes.forEach(function (note, i) {
-      var li = el('li', 'item');
+  function weekRange(a, b) {
+    var list = [];
+    for (var w = a; w <= b; w++) list.push(w);
+    return list;
+  }
+
+  // 2026–2027 学年第一学期 · 武鸣校区（第10周起剩余课程）
+  var COURSES = [
+    { name: '大数据与商务智能', teacher: '邹帆', day: 1, periods: [3, 4, 5], weeks: weekRange(10, 13), room: 'A-210', color: 'orange' },
+    { name: '运营管理', teacher: '杨从平', day: 1, periods: [6, 7, 8], weeks: [10], room: 'A-210', color: 'green' },
+    { name: '运营管理', teacher: '杨从平', day: 2, periods: [1, 2], weeks: [10], room: 'A-210', color: 'green' },
+    { name: '大数据与商务智能', teacher: '邹帆', day: 2, periods: [3, 4, 5], weeks: weekRange(10, 13), room: 'B-313', color: 'orange' },
+    { name: '跨境电子商务', teacher: '尹叶青', day: 3, periods: [3, 4, 5], weeks: weekRange(10, 16), room: 'B412', roomWeek10: 'A-306', color: 'teal' },
+    { name: '统计学', teacher: '陈桃红', day: 3, periods: [6, 7, 8], weeks: weekRange(12, 16), room: 'A-209', color: 'red' },
+    { name: '统计学', teacher: '陈桃红', day: 4, periods: [3, 4, 5], weeks: weekRange(11, 16), room: 'A-209', color: 'red' },
+    { name: '战略管理', teacher: '余琨岳', day: 4, periods: [6, 7], weeks: weekRange(10, 12), room: 'A-208', color: 'green' },
+    { name: '统计学', teacher: '陈桃红', day: 5, periods: [3, 4, 5], weeks: weekRange(11, 16), room: 'A-209', color: 'red' },
+    { name: '战略管理', teacher: '余琨岳', day: 5, periods: [8, 9], weeks: weekRange(10, 12), room: 'A-208', color: 'green' }
+  ];
+
+  var WEEK_MIN = 10, WEEK_MAX = 16;
+  var scheduleWeek = store.get('scheduleWeek', 10);
+  var jsDay = new Date().getDay(); // 0=周日
+  var scheduleDay = (jsDay >= 1 && jsDay <= 5) ? jsDay : 1;
+
+  function periodText(course) {
+    var first = course.periods[0];
+    var last = course.periods[course.periods.length - 1];
+    var range = course.periods.length > 1 ? '第' + first + '–' + last + '节' : '第' + first + '节';
+    return range + ' · ' + PERIODS[first].slice(0, 5) + '–' + PERIODS[last].slice(-5);
+  }
+
+  function weeksText(weeks) {
+    return weeks.length > 1 ? '第' + weeks[0] + '–' + weeks[weeks.length - 1] + '周' : '仅第' + weeks[0] + '周';
+  }
+
+  function renderSchedule() {
+    $('#week-label').textContent = '第' + scheduleWeek + '周';
+    document.querySelectorAll('.day-tabs .segment').forEach(function (seg) {
+      seg.classList.toggle('active', parseInt(seg.dataset.day, 10) === scheduleDay);
+    });
+    var list = $('#schedule-list');
+    list.innerHTML = '';
+    var todays = COURSES.filter(function (c) {
+      return c.day === scheduleDay && c.weeks.indexOf(scheduleWeek) !== -1;
+    });
+    if (!todays.length) {
+      var emptyLi = el('li', 'schedule-empty');
+      emptyLi.textContent = '这一天没有课';
+      list.appendChild(emptyLi);
+      return;
+    }
+    todays.forEach(function (c) {
+      var li = el('li', 'item course-item course-' + c.color);
       var wrap = el('div', 'item-text');
-      wrap.textContent = note.text;
+      var name = el('div', 'course-name');
+      name.textContent = c.name;
       var meta = el('div', 'item-meta');
-      meta.textContent = new Date(note.ts).toLocaleString('zh-CN');
+      meta.textContent = c.teacher + ' · ' + weeksText(c.weeks);
+      var time = el('div', 'course-time');
+      time.textContent = periodText(c);
+      wrap.appendChild(name);
+      wrap.appendChild(time);
       wrap.appendChild(meta);
-      var del = el('button', 'icon-btn danger');
-      del.title = '删除便签';
-      del.setAttribute('aria-label', '删除便签');
-      del.innerHTML = svgIcon(ICON_TRASH);
-      del.addEventListener('click', function () {
-        notes.splice(i, 1);
-        store.set('notes', notes);
-        renderNotes();
-      });
+      var room = el('div', 'course-room');
+      room.textContent = (scheduleWeek === 10 && c.roomWeek10) ? c.roomWeek10 : c.room;
+      if (c.roomWeek10) {
+        var tag = el('div', 'course-tag');
+        tag.textContent = '教室有变';
+        room.appendChild(tag);
+      }
       li.appendChild(wrap);
-      li.appendChild(del);
-      noteList.appendChild(li);
+      li.appendChild(room);
+      list.appendChild(li);
     });
   }
 
-  $('#note-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var text = $('#note-input').value.trim();
-    if (!text) return;
-    notes.unshift({ text: text, ts: Date.now() });
-    store.set('notes', notes);
-    e.target.reset();
-    renderNotes();
+  $('#week-prev').addEventListener('click', function () {
+    if (scheduleWeek > WEEK_MIN) {
+      scheduleWeek--;
+      store.set('scheduleWeek', scheduleWeek);
+      renderSchedule();
+    }
+  });
+  $('#week-next').addEventListener('click', function () {
+    if (scheduleWeek < WEEK_MAX) {
+      scheduleWeek++;
+      store.set('scheduleWeek', scheduleWeek);
+      renderSchedule();
+    }
+  });
+  document.querySelectorAll('.day-tabs .segment').forEach(function (seg) {
+    seg.addEventListener('click', function () {
+      scheduleDay = parseInt(seg.dataset.day, 10);
+      renderSchedule();
+    });
   });
 
   /* ================= 账号本 ================= */
@@ -428,7 +495,7 @@
   renderProfile();
   renderLinks();
   renderTodos();
-  renderNotes();
+  renderSchedule();
   renderAccounts();
   tickTotp();
   setInterval(tickTotp, 1000);

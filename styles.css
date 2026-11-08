@@ -194,8 +194,47 @@ textarea { resize: vertical; }
 .item.done .item-text { color: var(--muted); text-decoration: line-through; }
 .item .check-btn { color: var(--accent); }
 
-.note-form { display: flex; flex-direction: column; gap: 8px; }
-.note-form .btn { align-self: flex-end; }
+/* ---------- 课表 ---------- */
+.week-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.week-label { font-size: 17px; font-weight: 700; min-width: 72px; text-align: center; }
+
+.course-item { border-left: 4px solid var(--line); }
+.course-green { border-left-color: var(--accent); }
+.course-orange { border-left-color: var(--warm); }
+.course-red { border-left-color: var(--danger); }
+.course-teal { border-left-color: #177e89; }
+.course-name { font-size: 16px; font-weight: 700; }
+.course-time { color: var(--ink); font-size: 14px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.course-room {
+  flex: 0 0 auto;
+  text-align: right;
+  color: #2b6cb0;
+  font-size: 18px;
+  font-weight: 700;
+}
+.course-tag {
+  font-size: 11px;
+  font-weight: 400;
+  color: #177e89;
+  margin-top: 4px;
+}
+.schedule-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 32px 0;
+}
+.schedule-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 16px;
+}
 
 /* ---------- 账号本 ---------- */
 .account-form { display: flex; flex-direction: column; gap: 8px; }
