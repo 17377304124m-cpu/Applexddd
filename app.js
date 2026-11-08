@@ -24,6 +24,10 @@
   var ICON_TRASH = '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6z"/><path d="M10 11v6M14 11v6"/>';
   var ICON_CHECK = '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 5-5"/>';
   var ICON_CIRCLE = '<circle cx="12" cy="12" r="9"/>';
+  var ICON_COPY = '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>';
+  var ICON_COPIED = '<path d="M20 6 9 17l-5-5"/>';
+  var ICON_EYE = '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
+  var ICON_EYE_OFF = '<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24M6.1 6.1C3.6 7.7 2 12 2 12s3.5 7 10 7c2 0 3.8-.6 5.3-1.5M10 5.2c.6-.1 1.3-.2 2-.2 6.5 0 10 7 10 7s-.8 1.6-2.2 3.2M2 2l20 20"/>';
 
   function el(tag, className) {
     var node = document.createElement(tag);
@@ -227,6 +231,110 @@
     renderNotes();
   });
 
+  /* ================= 账号本 ================= */
+  var accounts = store.get('accounts', []);
+  var accountList = $('#account-list');
+
+  function copyText(text, btn) {
+    function done() {
+      btn.innerHTML = svgIcon(ICON_COPIED);
+      btn.classList.add('copied');
+      setTimeout(function () {
+        btn.innerHTML = svgIcon(ICON_COPY);
+        btn.classList.remove('copied');
+      }, 1200);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text, done); });
+    } else {
+      legacyCopy(text, done);
+    }
+  }
+
+  function legacyCopy(text, done) {
+    var ta = el('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  function renderAccounts() {
+    accountList.innerHTML = '';
+    accounts.forEach(function (acc, i) {
+      var li = el('li', 'item');
+      var wrap = el('div', 'item-text');
+      var site = el('div');
+      site.textContent = acc.site;
+      site.style.fontWeight = '600';
+      var user = el('div', 'account-line');
+      user.textContent = acc.user;
+      var pass = el('div', 'account-line account-pass');
+      pass.textContent = '••••••';
+      wrap.appendChild(site);
+      wrap.appendChild(user);
+      wrap.appendChild(pass);
+
+      var actions = el('div', 'account-actions');
+
+      var copyUser = el('button', 'icon-btn copy-btn');
+      copyUser.title = '复制账号';
+      copyUser.setAttribute('aria-label', '复制账号');
+      copyUser.innerHTML = svgIcon(ICON_COPY);
+      copyUser.addEventListener('click', function () { copyText(acc.user, copyUser); });
+
+      var copyPass = el('button', 'icon-btn copy-btn');
+      copyPass.title = '复制密码';
+      copyPass.setAttribute('aria-label', '复制密码');
+      copyPass.innerHTML = svgIcon(ICON_COPY);
+      copyPass.addEventListener('click', function () { copyText(acc.pass, copyPass); });
+
+      var visible = false;
+      var eye = el('button', 'icon-btn');
+      eye.title = '显示 / 隐藏密码';
+      eye.setAttribute('aria-label', '显示或隐藏密码');
+      eye.innerHTML = svgIcon(ICON_EYE);
+      eye.addEventListener('click', function () {
+        visible = !visible;
+        pass.textContent = visible ? acc.pass : '••••••';
+        eye.innerHTML = svgIcon(visible ? ICON_EYE_OFF : ICON_EYE);
+      });
+
+      var del = el('button', 'icon-btn danger');
+      del.title = '删除账号';
+      del.setAttribute('aria-label', '删除账号');
+      del.innerHTML = svgIcon(ICON_TRASH);
+      del.addEventListener('click', function () {
+        accounts.splice(i, 1);
+        store.set('accounts', accounts);
+        renderAccounts();
+      });
+
+      actions.appendChild(copyUser);
+      actions.appendChild(copyPass);
+      actions.appendChild(eye);
+      actions.appendChild(del);
+      li.appendChild(wrap);
+      li.appendChild(actions);
+      accountList.appendChild(li);
+    });
+  }
+
+  $('#account-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var site = $('#account-site').value.trim();
+    var user = $('#account-user').value.trim();
+    var pass = $('#account-pass').value;
+    if (!site || !user || !pass) return;
+    accounts.unshift({ site: site, user: user, pass: pass });
+    store.set('accounts', accounts);
+    e.target.reset();
+    renderAccounts();
+  });
+
   /* ================= 番茄钟 ================= */
   var RING_LEN = 552.92;
   var pomoTotal = 25 * 60;
@@ -302,5 +410,6 @@
   renderLinks();
   renderTodos();
   renderNotes();
+  renderAccounts();
   renderPomo();
 })();

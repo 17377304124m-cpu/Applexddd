@@ -197,6 +197,14 @@ textarea { resize: vertical; }
 .note-form { display: flex; flex-direction: column; gap: 8px; }
 .note-form .btn { align-self: flex-end; }
 
+/* ---------- 账号本 ---------- */
+.account-form { display: flex; flex-direction: column; gap: 8px; }
+.account-form .btn { align-self: flex-end; }
+.account-line { word-break: break-all; }
+.account-pass { color: var(--muted); }
+.account-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.item .copy-btn.copied { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
 /* ---------- 番茄钟 ---------- */
 .pomo { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .pomo-modes { width: 100%; margin-bottom: 0; }
