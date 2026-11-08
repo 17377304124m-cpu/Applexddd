@@ -5,7 +5,10 @@
 
 ## 当前进度
 
-已完成 v1.0 全部功能，可直接使用。
+已完成 v1.0 全部功能，已部署到 GitHub Pages，可直接使用。
+
+- 仓库：https://github.com/17377304124m-cpu/Applexddd
+- 线上地址：https://17377304124m-cpu.github.io/Applexddd/
 
 ## 已完成内容
 
@@ -19,10 +22,9 @@
 
 - **电脑本地**：双击 `index.html` 即可。
 - **iPhone 添加到主屏幕**（需要手机能访问到页面）：
-  1. 在本目录起一个局域网服务，例如 `python -m http.server 8000`
-  2. 手机连同一 Wi-Fi，Safari 打开 `http://<电脑IP>:8000`
-  3. 点分享按钮 →"添加到主屏幕"→ 桌面出现"明军"图标
-- 也可以把本目录部署到任意静态托管（GitHub Pages 等），手机访问后同样添加到主屏幕。
+  1. Safari 打开 https://17377304124m-cpu.github.io/Applexddd/
+  2. 点分享按钮 →"添加到主屏幕"→ 桌面出现"明军"图标
+  3. 局域网备用方式：本目录运行 `python -m http.server 8000`，手机访问 `http://<电脑IP>:8000`
 
 ## 待办事项
 
@@ -33,3 +35,4 @@
 
 - 入口文件 `index.html`，样式 `styles.css`，逻辑 `app.js`，localStorage 键：`profile` / `links` / `todos` / `notes` / `pomoDone`
 - 重新生成图标：运行 `powershell -ExecutionPolicy Bypass -File gen-icons.ps1`
+- 更新线上版本：改动后 `git add -A; git commit -m "..."; git push` 即可，Pages 自动重新构建
