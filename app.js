@@ -234,6 +234,47 @@
   /* ================= 账号本 ================= */
   var accounts = store.get('accounts', []);
   var accountList = $('#account-list');
+  var totpUpdaters = [];
+
+  /* TOTP（兼容谷歌验证器）：Base32 解码 + HMAC-SHA1 */
+  function base32Decode(str) {
+    var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    var clean = String(str).replace(/[\s=]+/g, '').toUpperCase();
+    var bits = 0, value = 0, out = [];
+    for (var i = 0; i < clean.length; i++) {
+      var idx = alphabet.indexOf(clean[i]);
+      if (idx === -1) return null;
+      value = (value << 5) | idx;
+      bits += 5;
+      if (bits >= 8) {
+        out.push((value >>> (bits - 8)) & 0xff);
+        bits -= 8;
+      }
+    }
+    return out.length ? new Uint8Array(out) : null;
+  }
+
+  function totpCode(secretBytes, step) {
+    return crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign'])
+      .then(function (key) {
+        var buf = new ArrayBuffer(8);
+        new DataView(buf).setUint32(4, step);
+        return crypto.subtle.sign('HMAC', key, buf);
+      })
+      .then(function (sig) {
+        var h = new Uint8Array(sig);
+        var off = h[h.length - 1] & 0xf;
+        var num = ((h[off] & 0x7f) << 24) | (h[off + 1] << 16) | (h[off + 2] << 8) | h[off + 3];
+        return ('000000' + (num % 1000000)).slice(-6);
+      });
+  }
+
+  function tickTotp() {
+    var now = Math.floor(Date.now() / 1000);
+    var step = Math.floor(now / 30);
+    var remain = 30 - (now % 30);
+    totpUpdaters.forEach(function (u) { u(step, remain); });
+  }
 
   function copyText(text, btn) {
     function done() {
@@ -264,8 +305,9 @@
 
   function renderAccounts() {
     accountList.innerHTML = '';
+    totpUpdaters = [];
     accounts.forEach(function (acc, i) {
-      var li = el('li', 'item');
+      var li = el('li', 'item account-item');
       var wrap = el('div', 'item-text');
       var site = el('div');
       site.textContent = acc.site;
@@ -277,6 +319,32 @@
       wrap.appendChild(site);
       wrap.appendChild(user);
       wrap.appendChild(pass);
+
+      var copyCode = null;
+      if (acc.secret) {
+        var secretBytes = base32Decode(acc.secret);
+        if (secretBytes) {
+          var totpRow = el('div', 'totp-row');
+          var codeEl = el('span', 'totp-code');
+          codeEl.textContent = '------';
+          var remainEl = el('span', 'totp-remain');
+          totpRow.appendChild(codeEl);
+          totpRow.appendChild(remainEl);
+          wrap.appendChild(totpRow);
+          var lastStep = -1;
+          totpUpdaters.push(function (step, remain) {
+            remainEl.textContent = remain + 's';
+            remainEl.classList.toggle('urgent', remain <= 5);
+            if (step !== lastStep) {
+              lastStep = step;
+              totpCode(secretBytes, step).then(function (code) {
+                codeEl.textContent = code.slice(0, 3) + ' ' + code.slice(3);
+              });
+            }
+          });
+          copyCode = true;
+        }
+      }
 
       var actions = el('div', 'account-actions');
 
@@ -291,6 +359,19 @@
       copyPass.setAttribute('aria-label', '复制密码');
       copyPass.innerHTML = svgIcon(ICON_COPY);
       copyPass.addEventListener('click', function () { copyText(acc.pass, copyPass); });
+
+      if (copyCode) {
+        var secretBytesForCopy = base32Decode(acc.secret);
+        var cc = el('button', 'icon-btn copy-btn totp-copy');
+        cc.title = '复制验证码';
+        cc.setAttribute('aria-label', '复制验证码');
+        cc.innerHTML = svgIcon(ICON_COPY);
+        cc.addEventListener('click', function () {
+          var step = Math.floor(Date.now() / 1000 / 30);
+          totpCode(secretBytesForCopy, step).then(function (code) { copyText(code, cc); });
+        });
+        actions.appendChild(cc);
+      }
 
       var visible = false;
       var eye = el('button', 'icon-btn');
@@ -321,6 +402,7 @@
       li.appendChild(actions);
       accountList.appendChild(li);
     });
+    tickTotp();
   }
 
   $('#account-form').addEventListener('submit', function (e) {
@@ -328,81 +410,18 @@
     var site = $('#account-site').value.trim();
     var user = $('#account-user').value.trim();
     var pass = $('#account-pass').value;
+    var secret = $('#account-secret').value.trim();
     if (!site || !user || !pass) return;
-    accounts.unshift({ site: site, user: user, pass: pass });
+    if (secret && !base32Decode(secret)) {
+      alert('2FA 密钥格式不正确，应为 Base32 字符串（如 JBSW Y3DP EHPK 3PXP）');
+      return;
+    }
+    var entry = { site: site, user: user, pass: pass };
+    if (secret) entry.secret = secret.replace(/\s+/g, '').toUpperCase();
+    accounts.unshift(entry);
     store.set('accounts', accounts);
     e.target.reset();
     renderAccounts();
-  });
-
-  /* ================= 番茄钟 ================= */
-  var RING_LEN = 552.92;
-  var pomoTotal = 25 * 60;
-  var pomoLeft = pomoTotal;
-  var pomoTimer = null;
-  var pomoDone = store.get('pomoDone', 0);
-  var timeEl = $('#pomo-time');
-  var ringEl = $('#ring-progress');
-
-  function fmt(sec) {
-    var m = Math.floor(sec / 60);
-    var s = sec % 60;
-    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-  }
-
-  function renderPomo() {
-    timeEl.textContent = fmt(pomoLeft);
-    ringEl.style.strokeDashoffset = String(RING_LEN * (1 - pomoLeft / pomoTotal));
-    $('#pomo-count').textContent = String(pomoDone);
-  }
-
-  function setPomoRunning(running) {
-    $('#pomo-icon-play').classList.toggle('hidden', running);
-    $('#pomo-icon-pause').classList.toggle('hidden', !running);
-  }
-
-  function stopPomo() {
-    clearInterval(pomoTimer);
-    pomoTimer = null;
-    setPomoRunning(false);
-  }
-
-  $('#pomo-toggle').addEventListener('click', function () {
-    if (pomoTimer) {
-      stopPomo();
-      return;
-    }
-    setPomoRunning(true);
-    pomoTimer = setInterval(function () {
-      pomoLeft--;
-      if (pomoLeft <= 0) {
-        stopPomo();
-        pomoLeft = pomoTotal;
-        if (pomoTotal === 25 * 60) {
-          pomoDone++;
-          store.set('pomoDone', pomoDone);
-        }
-        if (navigator.vibrate) navigator.vibrate(200);
-      }
-      renderPomo();
-    }, 1000);
-  });
-
-  $('#pomo-reset').addEventListener('click', function () {
-    stopPomo();
-    pomoLeft = pomoTotal;
-    renderPomo();
-  });
-
-  document.querySelectorAll('.pomo-modes .segment').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      document.querySelectorAll('.pomo-modes .segment').forEach(function (b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      stopPomo();
-      pomoTotal = parseInt(btn.dataset.minutes, 10) * 60;
-      pomoLeft = pomoTotal;
-      renderPomo();
-    });
   });
 
   /* ================= 初始化 ================= */
@@ -411,5 +430,6 @@
   renderTodos();
   renderNotes();
   renderAccounts();
-  renderPomo();
+  tickTotp();
+  setInterval(tickTotp, 1000);
 })();

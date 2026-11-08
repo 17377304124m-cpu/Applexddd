@@ -61,10 +61,6 @@
           <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
           <span>便签</span>
         </button>
-        <button class="segment" data-tool="pomodoro" role="tab" title="番茄钟">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
-          <span>番茄钟</span>
-        </button>
         <button class="segment" data-tool="account" role="tab" title="账号本">
           <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <span>账号</span>
@@ -91,40 +87,13 @@
         <ul id="note-list" class="item-list"></ul>
       </section>
 
-      <!-- 番茄钟 -->
-      <section id="tool-pomodoro" class="tool-panel">
-        <div class="pomo">
-          <div class="pomo-modes segmented">
-            <button class="segment active" data-minutes="25">专注 25</button>
-            <button class="segment" data-minutes="5">短休 5</button>
-            <button class="segment" data-minutes="15">长休 15</button>
-          </div>
-          <div class="pomo-ring-wrap">
-            <svg class="pomo-ring" viewBox="0 0 200 200">
-              <circle class="ring-bg" cx="100" cy="100" r="88"/>
-              <circle id="ring-progress" class="ring-progress" cx="100" cy="100" r="88"/>
-            </svg>
-            <div id="pomo-time" class="pomo-time">25:00</div>
-          </div>
-          <div class="pomo-controls">
-            <button id="pomo-toggle" class="icon-btn large accent" title="开始 / 暂停" aria-label="开始或暂停">
-              <svg id="pomo-icon-play" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z" fill="currentColor" stroke="none"/></svg>
-              <svg id="pomo-icon-pause" viewBox="0 0 24 24" class="hidden"><rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/></svg>
-            </button>
-            <button id="pomo-reset" class="icon-btn large" title="重置" aria-label="重置">
-              <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-            </button>
-          </div>
-          <p class="pomo-count">已完成 <strong id="pomo-count">0</strong> 个专注</p>
-        </div>
-      </section>
-
       <!-- 账号本 -->
       <section id="tool-account" class="tool-panel">
         <form id="account-form" class="account-form">
           <input id="account-site" type="text" placeholder="平台，如：微信" maxlength="30" required>
           <input id="account-user" type="text" placeholder="账号" maxlength="60" required>
           <input id="account-pass" type="text" placeholder="密码" maxlength="60" required autocomplete="off">
+          <input id="account-secret" type="text" placeholder="2FA 密钥（可选，谷歌验证器 Base32）" maxlength="128" autocomplete="off">
           <button type="submit" class="btn primary">保存账号</button>
         </form>
         <ul id="account-list" class="item-list"></ul>
