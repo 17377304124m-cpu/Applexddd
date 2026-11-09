@@ -23,6 +23,7 @@
       gesture = null;
       suppressClickUntil = 0;
       if (event.touches.length !== 1 || hasSelection()) return;
+      if (event.target.closest('[data-reordering="true"]')) return;
       var touch = event.touches[0];
       if (touch.clientX <= 24 || touch.clientX >= root.innerWidth - 24) return;
       var interactive = event.target.closest('input, textarea, select, option, button, a, label, summary, [contenteditable], [role="slider"]');

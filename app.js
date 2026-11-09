@@ -11,7 +11,7 @@
       }
     },
     set: function (key, value) {
-      try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+      try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
     }
   };
 
@@ -372,16 +372,24 @@
     linkList.innerHTML = '';
     links.forEach(function (link, i) {
       var li = el('li', 'link-item');
+      li.dataset.linkIndex = i;
       var icon = el('span', 'link-icon');
       icon.innerHTML = svgIcon(ICON_LINK);
       var a = el('a');
       a.href = link.url;
+      a.draggable = false;
       a.target = '_blank';
       a.rel = 'noopener';
       a.textContent = link.title;
       var small = el('small');
       small.textContent = link.url;
       a.appendChild(small);
+      var actions = el('div', 'link-actions');
+      var copy = el('button', 'icon-btn link-copy copy-btn');
+      copy.title = '复制网址';
+      copy.setAttribute('aria-label', '复制网址');
+      copy.innerHTML = svgIcon(ICON_COPY);
+      copy.addEventListener('click', function () { copyText(link.url, copy); });
       var del = el('button', 'icon-btn link-del');
       del.title = '删除链接';
       del.setAttribute('aria-label', '删除链接');
@@ -393,7 +401,9 @@
       });
       li.appendChild(icon);
       li.appendChild(a);
-      li.appendChild(del);
+      actions.appendChild(copy);
+      actions.appendChild(del);
+      li.appendChild(actions);
       linkList.appendChild(li);
     });
   }
@@ -402,11 +412,34 @@
     e.preventDefault();
     var title = $('#link-title').value.trim();
     var url = $('#link-url').value.trim();
-    if (!title || !url) return;
-    links.push({ title: title, url: url });
-    store.set('links', links);
+    if (!title || !url) { $('#link-form-feedback').textContent = '请填写名称和网址。'; return; }
+    var next = links.concat([{ title: title, url: url }]);
+    if (!store.set('links', next)) { $('#link-form-feedback').textContent = '保存失败，请检查浏览器本地存储权限后重试。'; return; }
+    links = next;
     e.target.reset();
     renderLinks();
+    $('#link-dialog').close();
+    $('#info-feedback').textContent = '链接已添加。';
+  });
+
+  $('#link-add-open').addEventListener('click', function () {
+    $('#link-form').reset();
+    $('#link-form-feedback').textContent = '';
+    $('#link-dialog').showModal();
+  });
+  $('#link-dialog-close').addEventListener('click', function () { $('#link-dialog').close(); });
+
+  LinkReorder.init(linkList, {
+    move: function (from, to) {
+      if (from === to || from < 0 || to < 0 || from >= links.length || to >= links.length) return false;
+      var next = links.slice();
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      if (!store.set('links', next)) { $('#info-feedback').textContent = '排序保存失败，原顺序未修改。'; return false; }
+      links = next;
+      renderLinks();
+      $('#info-feedback').textContent = '链接顺序已更新。';
+      return true;
+    }
   });
 
   /* ================= 工具分段切换 ================= */
@@ -655,26 +688,28 @@
     function done() {
       btn.innerHTML = svgIcon(ICON_COPIED);
       btn.classList.add('copied');
+      $('#info-feedback').textContent = btn.title.replace(/^复制/, '') + '已复制。';
       setTimeout(function () {
         btn.innerHTML = svgIcon(ICON_COPY);
         btn.classList.remove('copied');
       }, 1200);
     }
+    function failed() { $('#info-feedback').textContent = '复制失败，请重试。'; }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text, done); });
+      navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text, done, failed); });
     } else {
-      legacyCopy(text, done);
+      legacyCopy(text, done, failed);
     }
   }
 
-  function legacyCopy(text, done) {
+  function legacyCopy(text, done, failed) {
     var ta = el('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
     ta.style.opacity = '0';
     document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand('copy'); done(); } catch (e) {}
+    try { if (document.execCommand('copy')) done(); else failed(); } catch (e) { failed(); }
     document.body.removeChild(ta);
   }
 
@@ -687,7 +722,7 @@
       var site = el('div');
       site.textContent = acc.site;
       site.style.fontWeight = '600';
-      var user = el('div', 'account-line');
+      var user = el('div', 'account-line account-user');
       user.textContent = acc.user;
       var pass = el('div', 'account-line account-pass');
       pass.textContent = '••••••';
@@ -723,13 +758,13 @@
 
       var actions = el('div', 'account-actions');
 
-      var copyUser = el('button', 'icon-btn copy-btn');
+      var copyUser = el('button', 'icon-btn copy-btn copy-user');
       copyUser.title = '复制账号';
       copyUser.setAttribute('aria-label', '复制账号');
       copyUser.innerHTML = svgIcon(ICON_COPY);
       copyUser.addEventListener('click', function () { copyText(acc.user, copyUser); });
 
-      var copyPass = el('button', 'icon-btn copy-btn');
+      var copyPass = el('button', 'icon-btn copy-btn copy-pass');
       copyPass.title = '复制密码';
       copyPass.setAttribute('aria-label', '复制密码');
       copyPass.innerHTML = svgIcon(ICON_COPY);
@@ -786,18 +821,28 @@
     var user = $('#account-user').value.trim();
     var pass = $('#account-pass').value;
     var secret = $('#account-secret').value.trim();
-    if (!site || !user || !pass) return;
+    if (!site || !user || !pass) { $('#account-form-feedback').textContent = '请填写平台、账号和密码。'; return; }
     if (secret && !base32Decode(secret)) {
-      alert('2FA 密钥格式不正确，应为 Base32 字符串（如 JBSW Y3DP EHPK 3PXP）');
+      $('#account-form-feedback').textContent = '2FA 密钥格式不正确，请检查后重试。';
       return;
     }
     var entry = { site: site, user: user, pass: pass };
     if (secret) entry.secret = secret.replace(/\s+/g, '').toUpperCase();
-    accounts.unshift(entry);
-    store.set('accounts', accounts);
+    var next = [entry].concat(accounts);
+    if (!store.set('accounts', next)) { $('#account-form-feedback').textContent = '保存失败，请检查浏览器本地存储权限后重试。'; return; }
+    accounts = next;
     e.target.reset();
     renderAccounts();
+    $('#account-dialog').close();
+    $('#info-feedback').textContent = '账号已添加。';
   });
+
+  $('#account-add-open').addEventListener('click', function () {
+    $('#account-form').reset();
+    $('#account-form-feedback').textContent = '';
+    $('#account-dialog').showModal();
+  });
+  $('#account-dialog-close').addEventListener('click', function () { $('#account-dialog').close(); });
 
   /* ================= 初始化 ================= */
   QuickEventCapture.init({
@@ -813,6 +858,7 @@
     reveal: function (date) { jumpToCalendar(date); }
   });
   MobileSwipes.init();
+  FixedViewport.init();
   renderProfile();
   renderCalendar();
   renderLinks();

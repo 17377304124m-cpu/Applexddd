@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>明军的生活助理</title>
   <meta name="description" content="明军的生活助理：日历节日、日常课表、待办清单与账号记忆。">
 
@@ -16,7 +16,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="icon-192.png">
 
-  <link rel="stylesheet" href="styles.css?v=1.9">
+  <link rel="stylesheet" href="styles.css?v=1.10">
 </head>
 <body>
   <div class="app">
@@ -150,27 +150,25 @@
           <span>链接</span>
         </button>
       </div>
+      <p id="info-feedback" class="life-feedback" role="status"></p>
       <!-- 账号本 -->
       <section id="tool-account" class="tool-panel active">
-        <form id="account-form" class="account-form">
-          <input id="account-site" type="text" placeholder="平台，如：微信" maxlength="30" required>
-          <input id="account-user" type="text" placeholder="账号" maxlength="60" required>
-          <input id="account-pass" type="text" placeholder="密码" maxlength="60" required autocomplete="off">
-          <input id="account-secret" type="text" placeholder="2FA 密钥（可选，谷歌验证器 Base32）" maxlength="128" autocomplete="off">
-          <button type="submit" class="btn primary">保存账号</button>
-        </form>
+        <div class="info-section-heading">
+          <h2 class="section-title">账号本</h2>
+          <button id="account-add-open" class="icon-btn accent" title="添加账号" aria-label="添加账号">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
         <ul id="account-list" class="item-list"></ul>
       </section>
       <section id="tool-links" class="tool-panel">
-        <h2 class="section-title">常用链接</h2>
-        <ul id="link-list" class="link-list"></ul>
-        <form id="link-form" class="inline-form">
-          <input id="link-title" type="text" placeholder="名称" maxlength="20" required>
-          <input id="link-url" type="url" placeholder="https://" required>
-          <button type="submit" class="icon-btn accent" title="添加链接" aria-label="添加链接">
+        <div class="info-section-heading">
+          <h2 class="section-title">常用链接</h2>
+          <button id="link-add-open" class="icon-btn accent" title="添加链接" aria-label="添加链接">
             <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
           </button>
-        </form>
+        </div>
+        <ul id="link-list" class="link-list"></ul>
       </section>
     </main>
 
@@ -205,6 +203,36 @@
     </nav>
   </div>
 
+  <dialog id="link-dialog" class="life-dialog" aria-labelledby="link-dialog-title">
+    <div class="life-dialog-body">
+      <div class="life-dialog-header">
+        <h2 id="link-dialog-title">添加链接</h2>
+        <button id="link-dialog-close" class="icon-btn" aria-label="关闭添加链接">×</button>
+      </div>
+      <form id="link-form" class="life-form">
+        <label>名称<input id="link-title" type="text" placeholder="名称" maxlength="20" required></label>
+        <label>网址<input id="link-url" type="url" placeholder="https://" required></label>
+        <p id="link-form-feedback" class="life-feedback" role="status"></p>
+        <button type="submit" class="btn primary">保存链接</button>
+      </form>
+    </div>
+  </dialog>
+  <dialog id="account-dialog" class="life-dialog" aria-labelledby="account-dialog-title">
+    <div class="life-dialog-body">
+      <div class="life-dialog-header">
+        <h2 id="account-dialog-title">添加账号</h2>
+        <button id="account-dialog-close" class="icon-btn" aria-label="关闭添加账号">×</button>
+      </div>
+      <form id="account-form" class="life-form">
+        <label>平台<input id="account-site" type="text" placeholder="如：微信" maxlength="30" required></label>
+        <label>账号<input id="account-user" type="text" placeholder="账号" maxlength="60" required></label>
+        <label>密码<input id="account-pass" type="text" placeholder="密码" maxlength="60" required autocomplete="off"></label>
+        <label>2FA 密钥（选填）<input id="account-secret" type="text" placeholder="谷歌验证器 Base32" maxlength="128" autocomplete="off"></label>
+        <p id="account-form-feedback" class="life-feedback" role="status"></p>
+        <button type="submit" class="btn primary">保存账号</button>
+      </form>
+    </div>
+  </dialog>
   <dialog id="life-dialog" class="life-dialog" aria-labelledby="life-dialog-title">
     <div class="life-dialog-body">
       <div class="life-dialog-header">
@@ -284,7 +312,9 @@
   <script src="Applexddd_课表识别界面_20261108_v1.0.js?v=1.9"></script>
   <script src="Applexddd_日程识别_20261108_v1.0.js"></script>
   <script src="Applexddd_快速日程界面_20261108_v1.0.js"></script>
-  <script src="Applexddd_滑动切换_20261108_v1.0.js"></script>
-  <script src="app.js?v=1.9"></script>
+  <script src="Applexddd_滑动切换_20261108_v1.0.js?v=1.10"></script>
+  <script src="Applexddd_链接排序_20261109_v1.0.js"></script>
+  <script src="Applexddd_固定视口_20261109_v1.0.js"></script>
+  <script src="app.js?v=1.10"></script>
 </body>
 </html>

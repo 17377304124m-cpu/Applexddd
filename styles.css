@@ -9,17 +9,20 @@
   --warm: #d9763f;
   --danger: #c64533;
   --radius: 8px;
+  --account-user: #2563eb;
+  --account-pass: #7c3aed;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; touch-action: pan-x pan-y; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--ink);
   letter-spacing: 0;
+  touch-action: pan-x pan-y;
 }
 
 .app {
@@ -207,6 +210,23 @@ textarea { resize: vertical; }
 }
 .link-item a small { display: block; color: var(--muted); font-size: 12px; }
 .link-del { color: var(--danger); }
+.info-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.info-section-heading .section-title { margin: 0; }
+.link-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.link-actions .icon-btn { width: 36px; height: 36px; flex-basis: 36px; }
+.link-copy { color: var(--accent); }
+.link-copy.copied { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+#info-feedback:empty, #link-form-feedback:empty, #account-form-feedback:empty { display: none; }
+.link-item { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.link-item a { -webkit-touch-callout: none; }
+.link-item { flex-wrap: wrap; position: relative; }
+.link-sort-active { border-color: var(--accent); }
+.link-dragging { position: relative; z-index: 1; opacity: .85; transition: none; background: var(--accent-soft); box-shadow: 0 3px 12px rgba(31, 38, 34, .12); }
+.link-drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.link-sort-actions { display: flex; flex: 1 0 100%; justify-content: flex-end; gap: 6px; }
+.link-dragging .link-sort-actions { display: none; }
+.link-sort-actions button { padding: 6px 10px; font-size: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--accent); cursor: pointer; }
+.link-sort-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .inline-form { display: flex; gap: 8px; align-items: center; }
 
@@ -318,10 +338,13 @@ button:disabled { opacity: .45; cursor: default; }
 }
 
 /* ---------- 账号本 ---------- */
-.account-form { display: flex; flex-direction: column; gap: 8px; }
-.account-form .btn { align-self: flex-end; }
 .account-line { word-break: break-all; }
-.account-pass { color: var(--muted); }
+.account-user { color: var(--account-user); }
+.account-pass { color: var(--account-pass); }
+.account-actions .copy-user { color: var(--account-user); }
+.account-actions .copy-pass { color: var(--account-pass); }
+.account-item .account-actions .copy-user.copied { color: var(--account-user); border-color: var(--account-user); background: #eff6ff; }
+.account-item .account-actions .copy-pass.copied { color: var(--account-pass); border-color: var(--account-pass); background: #f5f3ff; }
 .account-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .item .copy-btn.copied { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .totp-row {
@@ -424,3 +447,7 @@ button:active { transform: scale(.96); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+@media (pointer: coarse) {
+  input, textarea, select { font-size: 16px !important; }
+}
+.life-dialog, input, textarea, select { touch-action: pan-x pan-y; }
