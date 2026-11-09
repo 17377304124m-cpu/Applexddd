@@ -60,6 +60,8 @@
   function renderProfile() {
     nameEl.textContent = profile.name;
     taglineEl.textContent = profile.tagline;
+    $('#home-profile-name').textContent = profile.name;
+    $('#home-profile-tagline').textContent = profile.tagline;
     document.title = profile.name + '的生活助理';
   }
 
@@ -68,6 +70,7 @@
       editing = true;
       editBtn.title = '保存资料';
       editBtn.setAttribute('aria-label', '保存资料');
+      editBtn.textContent = '保存资料';
       nameEl.innerHTML = '<input id="edit-name" class="editing-input" maxlength="20">';
       taglineEl.innerHTML = '<input id="edit-tagline" class="editing-input" maxlength="40">';
       $('#edit-name').value = profile.name;
@@ -82,7 +85,12 @@
       editBtn.classList.remove('accent');
       editBtn.title = '编辑资料';
       editBtn.setAttribute('aria-label', '编辑资料');
+      editBtn.textContent = '编辑资料';
     }
+  });
+
+  $('#profile-open-btn').addEventListener('click', function () {
+    document.querySelector('[data-page="personal"]').click();
   });
 
   /* ================= 生活日历 ================= */
@@ -405,9 +413,10 @@
   var segments = document.querySelectorAll('.segmented .segment[data-tool]');
   segments.forEach(function (seg) {
     seg.addEventListener('click', function () {
-      segments.forEach(function (s) { s.classList.remove('active'); });
+      var page = seg.closest('.page');
+      page.querySelectorAll('[data-tool]').forEach(function (s) { s.classList.remove('active'); });
       seg.classList.add('active');
-      document.querySelectorAll('.tool-panel').forEach(function (p) { p.classList.remove('active'); });
+      page.querySelectorAll('.tool-panel').forEach(function (p) { p.classList.remove('active'); });
       $('#tool-' + seg.dataset.tool).classList.add('active');
     });
   });
@@ -791,6 +800,19 @@
   });
 
   /* ================= 初始化 ================= */
+  QuickEventCapture.init({
+    save: function (events) {
+      var added = events.map(function (event) {
+        return { id: crypto.randomUUID(), title: event.title, date: event.date, note: event.note };
+      });
+      var next = personalEvents.concat(added);
+      localStorage.setItem('personalEvents', JSON.stringify(next));
+      personalEvents = next;
+      renderCalendar();
+    },
+    reveal: function (date) { jumpToCalendar(date); }
+  });
+  MobileSwipes.init();
   renderProfile();
   renderCalendar();
   renderLinks();

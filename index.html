@@ -16,7 +16,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="icon-192.png">
 
-  <link rel="stylesheet" href="styles.css?v=1.8">
+  <link rel="stylesheet" href="styles.css?v=1.9">
 </head>
 <body>
   <div class="app">
@@ -24,12 +24,12 @@
     <!-- ============ 主页 ============ -->
     <main id="page-home" class="page active">
       <header class="profile">
-        <img class="avatar" src="avatar.png" alt="头像">
+        <img class="avatar" src="Applexddd_素描头像_20261108_v1.0.jpg" alt="头像">
         <div class="profile-info">
-          <h1 id="profile-name" class="profile-name">明军</h1>
-          <p id="profile-tagline" class="profile-tagline">保持好奇，持续行动</p>
+          <h1 id="home-profile-name" class="profile-name">明军</h1>
+          <p id="home-profile-tagline" class="profile-tagline">保持好奇，持续行动</p>
         </div>
-        <button id="profile-edit-btn" class="icon-btn" title="编辑资料" aria-label="编辑资料">
+        <button id="profile-open-btn" class="icon-btn" title="个人资料" aria-label="个人资料">
           <svg viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
         </button>
       </header>
@@ -63,6 +63,23 @@
         </div>
       </section>
 
+      <section class="capture-card" aria-labelledby="capture-heading">
+        <h2 id="capture-heading" class="section-title">快速记日程</h2>
+        <label class="capture-source-label" for="capture-text">文字或通知内容</label>
+        <textarea id="capture-text" rows="3" maxlength="6000" placeholder="如：明天下午3点在图书馆开会"></textarea>
+        <input id="capture-photo" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        <div class="capture-actions">
+          <button id="capture-pick-image" class="btn">添加图片</button>
+          <button id="capture-analyze" class="btn primary">识别日程</button>
+          <button id="capture-cancel" class="btn" hidden>取消识别</button>
+        </div>
+        <progress id="capture-progress" max="1" value="0" aria-label="日程图片识别进度" hidden></progress>
+        <p id="capture-status" class="life-feedback" role="status"></p>
+        <details id="capture-original" class="schedule-image-details" hidden>
+          <summary>查看原图</summary>
+          <img id="capture-preview" alt="日程图片原图">
+        </details>
+      </section>
     </main>
 
     <!-- ============ 工具页 ============ -->
@@ -75,14 +92,6 @@
         <button class="segment" data-tool="schedule" role="tab" title="课表">
           <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
           <span>课表</span>
-        </button>
-        <button class="segment" data-tool="account" role="tab" title="账号本">
-          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <span>账号</span>
-        </button>
-        <button class="segment" data-tool="links" role="tab" title="常用链接">
-          <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          <span>链接</span>
         </button>
       </div>
 
@@ -127,8 +136,22 @@
         <ul id="schedule-list" class="item-list"></ul>
       </section>
 
+    </main>
+
+    <main id="page-info" class="page">
+      <h2 class="section-title">信息</h2>
+      <div class="segmented" role="tablist">
+        <button class="segment active" data-tool="account" role="tab" title="账号本">
+          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>账号</span>
+        </button>
+        <button class="segment" data-tool="links" role="tab" title="常用链接">
+          <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span>链接</span>
+        </button>
+      </div>
       <!-- 账号本 -->
-      <section id="tool-account" class="tool-panel">
+      <section id="tool-account" class="tool-panel active">
         <form id="account-form" class="account-form">
           <input id="account-site" type="text" placeholder="平台，如：微信" maxlength="30" required>
           <input id="account-user" type="text" placeholder="账号" maxlength="60" required>
@@ -151,6 +174,16 @@
       </section>
     </main>
 
+    <main id="page-personal" class="page">
+      <h2 class="section-title">个人</h2>
+      <section class="personal-card" aria-label="个人资料">
+        <img class="personal-avatar" src="Applexddd_素描头像_20261108_v1.0.jpg" alt="个人头像">
+        <h1 id="profile-name" class="profile-name">明军</h1>
+        <p id="profile-tagline" class="profile-tagline">保持好奇，持续行动</p>
+        <button id="profile-edit-btn" class="btn primary" title="编辑资料" aria-label="编辑资料">编辑资料</button>
+      </section>
+    </main>
+
     <!-- ============ 底部标签栏 ============ -->
     <nav class="tabbar">
       <button class="tab active" data-page="home" title="主页">
@@ -160,6 +193,14 @@
       <button class="tab" data-page="tools" title="工具">
         <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         <span>工具</span>
+      </button>
+      <button class="tab" data-page="info" title="信息">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6M7 17h4"/></svg>
+        <span>信息</span>
+      </button>
+      <button class="tab" data-page="personal" title="个人">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>
+        <span>个人</span>
       </button>
     </nav>
   </div>
@@ -190,6 +231,20 @@
       <label class="life-search">查找记录<input id="life-search" type="search" placeholder="搜索姓名、事件或备注"></label>
       <ul id="life-record-list" class="life-record-list"></ul>
       <p class="life-hint">记录保存在当前浏览器中。</p>
+    </div>
+  </dialog>
+  <dialog id="capture-dialog" class="life-dialog capture-dialog" aria-labelledby="capture-dialog-title">
+    <div class="life-dialog-body">
+      <div class="life-dialog-header">
+        <h2 id="capture-dialog-title">核对日程</h2>
+        <button id="capture-close" class="icon-btn" aria-label="关闭日程核对">×</button>
+      </div>
+      <form id="capture-review-form">
+        <div id="capture-event-rows"></div>
+        <p id="capture-review-status" class="life-feedback" role="status"></p>
+        <button id="capture-add-row" type="button" class="btn">添加一条</button>
+        <button id="capture-save" type="submit" class="btn primary">加入日历</button>
+      </form>
     </div>
   </dialog>
   <dialog id="schedule-dialog" class="life-dialog schedule-dialog" aria-labelledby="schedule-dialog-title">
@@ -225,7 +280,11 @@
   <script src="Applexddd_农历历法_20261108_v1.0.js"></script>
   <script src="Applexddd_日历_20261108_v1.0.js"></script>
   <script src="Applexddd_课表导入_20261108_v1.0.js"></script>
-  <script src="Applexddd_课表识别界面_20261108_v1.0.js"></script>
-  <script src="app.js?v=1.8"></script>
+  <script src="Applexddd_图片识别_20261108_v1.0.js"></script>
+  <script src="Applexddd_课表识别界面_20261108_v1.0.js?v=1.9"></script>
+  <script src="Applexddd_日程识别_20261108_v1.0.js"></script>
+  <script src="Applexddd_快速日程界面_20261108_v1.0.js"></script>
+  <script src="Applexddd_滑动切换_20261108_v1.0.js"></script>
+  <script src="app.js?v=1.9"></script>
 </body>
 </html>

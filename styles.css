@@ -104,12 +104,18 @@ textarea { resize: vertical; }
   border-radius: 50%;
   background: var(--accent-soft);
   flex: 0 0 48px;
+  object-fit: cover;
 }
 .profile-info { flex: 1; min-width: 0; }
 .profile-name { font-size: 21px; font-weight: 700; overflow-wrap: anywhere; }
 .profile-tagline { color: var(--muted); font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; }
 .profile .icon-btn { width: 36px; height: 36px; flex-basis: 36px; }
 .profile .icon-btn svg { width: 18px; height: 18px; }
+.personal-card { padding: 28px 20px; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.personal-avatar { width: 96px; height: 96px; object-fit: cover; border-radius: 50%; margin-bottom: 16px; }
+.personal-card .profile-tagline { margin-top: 8px; }
+.personal-card .btn { margin-top: 22px; }
+.personal-card .editing-input { max-width: 300px; }
 
 .section-title { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
 
@@ -353,7 +359,7 @@ button:disabled { opacity: .45; cursor: default; }
 }
 .tab {
   flex: 1;
-  max-width: 240px;
+  max-width: 120px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -371,6 +377,25 @@ button:disabled { opacity: .45; cursor: default; }
 
 /* ---------- 编辑态 ---------- */
 .editing-input { margin-bottom: 6px; }
+
+/* ---------- 快速记日程 ---------- */
+.capture-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 20px; }
+.capture-source-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.capture-card textarea { resize: vertical; min-height: 90px; }
+.capture-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.capture-actions .btn { font-size: 13px; padding: 9px 12px; }
+#capture-progress { width: 100%; accent-color: var(--accent); margin-top: 12px; }
+#capture-status:empty, #capture-review-status:empty { display: none; }
+.capture-dialog { max-width: 640px; }
+.capture-event-row { padding: 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.capture-row-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.capture-row-heading h3 { font-size: 14px; }
+.capture-row-heading .btn { color: var(--danger); font-size: 12px; padding: 5px 8px; }
+.capture-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.capture-fields label { min-width: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.capture-fields .capture-wide { grid-column: 1 / -1; }
+.capture-fields input, .capture-fields textarea { min-width: 0; font-size: 14px; }
+#capture-review-status { white-space: pre-line; }
 
 /* ---------- 轻量动效 ---------- */
 button { -webkit-tap-highlight-color: transparent; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease; }

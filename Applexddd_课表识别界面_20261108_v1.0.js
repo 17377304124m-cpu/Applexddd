@@ -1,25 +1,6 @@
 (function () {
   'use strict';
 
-  var ocrLoader;
-  function loadRecognizer() {
-    if (window.Tesseract) return Promise.resolve(window.Tesseract);
-    if (!ocrLoader) ocrLoader = new Promise(function (resolve, reject) {
-      var script = document.createElement('script');
-      var timer = setTimeout(function () { fail(); }, 30000);
-      function fail() {
-        clearTimeout(timer);
-        script.remove();
-        reject(new Error('识别资源加载失败，请检查网络后重试。'));
-      }
-      script.src = 'Applexddd_OCR引擎_20261108_v1.0.js';
-      script.onload = function () { clearTimeout(timer); resolve(window.Tesseract); };
-      script.onerror = fail;
-      document.head.appendChild(script);
-    }).catch(function (error) { ocrLoader = null; throw error; });
-    return ocrLoader;
-  }
-
   window.SchedulePhotoImport = {
     init: function (options) {
       var $ = function (selector) { return document.querySelector(selector); };
@@ -28,10 +9,9 @@
       var rows = [];
       var selectedFile = null;
       var imageUrl = '';
-      var worker = null;
       var run = 0;
       var busy = false;
-      var initializationController = null;
+      var recognitionController = null;
 
       function setBusy(value) {
         busy = value;
@@ -44,8 +24,7 @@
 
       function cancelRecognition() {
         run++;
-        if (initializationController) { initializationController.abort(); initializationController = null; }
-        if (worker) { worker.terminate(); worker = null; }
+        if (recognitionController) { recognitionController.abort(); recognitionController = null; }
         setBusy(false);
       }
 
@@ -167,58 +146,31 @@
       $('#schedule-recognize').addEventListener('click', async function () {
         if (!selectedFile || busy) return;
         var currentRun = ++run;
-        var currentWorker;
-        var initializationTimer;
-        var timedOut = false;
+        var controller = new AbortController();
+        recognitionController = controller;
         setBusy(true); $('#schedule-progress').value = 0;
         status.textContent = '正在读取图片…';
         try {
-          var image = new Image(); image.src = imageUrl; await image.decode();
-          var scale = Math.min(2, 2400 / image.naturalWidth, 3200 / image.naturalHeight);
-          var canvas = document.createElement('canvas');
-          canvas.width = Math.round(image.naturalWidth * scale);
-          canvas.height = Math.round(image.naturalHeight * scale);
-          var context = canvas.getContext('2d');
-          context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
-          context.drawImage(image, 0, 0, canvas.width, canvas.height);
-          if (run !== currentRun) return;
-          status.textContent = '正在加载识别资源…';
-          var engine = await loadRecognizer();
-          if (run !== currentRun) return;
-          initializationController = new AbortController();
-          var controller = initializationController;
-          initializationTimer = setTimeout(function () { timedOut = true; controller.abort(); }, 60000);
-          currentWorker = await engine.createWorker('chi_sim', 1, {
-            workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/worker.min.js',
-            corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@6.0.0',
-            langPath: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/chi_sim@1.0.0/4.0.0_best_int',
-            workerBlobURL: true, cacheMethod: 'none',
+          var data = await ImageTextRecognizer.recognize(selectedFile, {
             signal: controller.signal,
-            errorHandler: function () {},
-            logger: function (message) {
+            onProgress: function (message) {
               if (run !== currentRun) return;
-              if (message.status === 'recognizing text') {
+              if (message.phase === 'loading') status.textContent = '正在加载识别资源…';
+              if (message.phase === 'recognizing') {
                 $('#schedule-progress').value = message.progress;
                 status.textContent = '正在识别课表… ' + Math.round(message.progress * 100) + '%';
               }
             }
           });
-          clearTimeout(initializationTimer);
-          if (initializationController === controller) initializationController = null;
-          if (run !== currentRun) { await currentWorker.terminate(); return; }
-          worker = currentWorker;
-          var result = await currentWorker.recognize(canvas, {}, { text: true, blocks: true });
           if (run !== currentRun) return;
-          rows = ScheduleImport.parseOcr(result.data);
+          rows = ScheduleImport.parseOcr(data);
           $('#schedule-review').hidden = false;
           renderRows();
           status.textContent = rows.length ? '已整理出 ' + rows.length + ' 条课程，请核对后保存。' : '未能整理出课程，请换一张清晰截图，或对照原图添加课程。';
         } catch (error) {
-          if (run === currentRun) status.textContent = timedOut ? '识别资源加载超时，请检查网络后重试；原课表未修改。' : '识别失败，请检查网络与图片后重试；原课表未修改。';
+          if (run === currentRun) status.textContent = '识别失败：' + error.message + '原课表未修改。';
         } finally {
-          clearTimeout(initializationTimer);
-          if (initializationController === controller) initializationController = null;
-          if (currentWorker && worker === currentWorker) { worker = null; await currentWorker.terminate(); }
+          if (recognitionController === controller) recognitionController = null;
           if (run === currentRun) setBusy(false);
         }
       });
