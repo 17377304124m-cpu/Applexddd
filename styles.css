@@ -119,6 +119,15 @@ textarea { resize: vertical; }
 .personal-card .profile-tagline { margin-top: 8px; }
 .personal-card .btn { margin-top: 22px; }
 .personal-card .editing-input { max-width: 300px; }
+.backup-card { margin-top: 20px; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.backup-actions { display: flex; gap: 10px; margin-top: 16px; }
+.backup-actions .btn { flex: 1; border: 1px solid var(--line); }
+.backup-actions .primary { border-color: var(--accent); }
+#backup-feedback:empty, #backup-restore-feedback:empty { display: none; }
+.backup-time { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.backup-counts { margin: 12px 0; }
+.backup-counts > div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.backup-counts dd { color: var(--accent); text-align: right; }
 
 .section-title { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
 

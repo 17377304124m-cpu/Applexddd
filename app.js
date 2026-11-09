@@ -532,10 +532,14 @@
   }
   var WEEK_MIN, WEEK_MAX;
   function updateScheduleBounds() {
-    var weeks = [];
-    COURSES.forEach(function (course) { weeks = weeks.concat(course.weeks); });
-    WEEK_MIN = Math.min.apply(null, weeks);
-    WEEK_MAX = Math.max.apply(null, weeks);
+    WEEK_MIN = Infinity;
+    WEEK_MAX = -Infinity;
+    COURSES.forEach(function (course) {
+      course.weeks.forEach(function (week) {
+        WEEK_MIN = Math.min(WEEK_MIN, week);
+        WEEK_MAX = Math.max(WEEK_MAX, week);
+      });
+    });
   }
   updateScheduleBounds();
   var scheduleWeek = store.get('scheduleWeek', 10);
@@ -845,6 +849,15 @@
   $('#account-dialog-close').addEventListener('click', function () { $('#account-dialog').close(); });
 
   /* ================= 初始化 ================= */
+  BackupUI.init({
+    getData: function () {
+      return {
+        profile: profile, links: links, todos: todos, scheduleWeek: scheduleWeek,
+        accounts: accounts, birthdays: birthdays, personalEvents: personalEvents,
+        importedSchedule: { version: 1, courses: COURSES }
+      };
+    }
+  });
   QuickEventCapture.init({
     save: function (events) {
       var added = events.map(function (event) {
