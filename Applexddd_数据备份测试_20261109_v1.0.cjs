@@ -19,6 +19,24 @@ function data() {
   };
 }
 
+test('待办完成时间随备份往返和恢复保留，旧待办仍兼容', () => {
+  const source = data();
+  source.todos[0].completedAt = '2026-11-01T02:00:00.000Z';
+  const parsed = api().parse(JSON.stringify(api().create(source, exportedAt)));
+  const store = memoryStorage();
+  api().restore(store, parsed);
+  assert.deepEqual(JSON.parse(store.getItem('todos')), source.todos);
+  assert.deepEqual(api().create(data(), exportedAt).data.todos, data().todos);
+});
+
+test('拒绝非法待办完成时间，不破坏归档时间计算', () => {
+  for (const completedAt of [null, 123, {}, 'not-a-date', '2026-02-30T02:00:00.000Z']) {
+    const source = data();
+    source.todos[0].completedAt = completedAt;
+    assert.throws(() => api().create(source, exportedAt), /待办/);
+  }
+});
+
 function envelope(changes = {}) {
   return { format: 'Applexddd.backup', version: 1, exportedAt, data: data(), ...changes };
 }

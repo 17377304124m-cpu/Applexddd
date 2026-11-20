@@ -76,6 +76,7 @@
     });
     items(data.todos, '待办', function (todo) {
       check(text(todo.text, true) && typeof todo.done === 'boolean', '待办');
+      check(todo.completedAt === undefined || validTimestamp(todo.completedAt), '待办完成时间');
     });
     check(integer(data.scheduleWeek, 1, 60), '课表周次');
     items(data.accounts, '账号', function (account) {

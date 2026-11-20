@@ -26,6 +26,7 @@
   var ICON_CIRCLE = '<circle cx="12" cy="12" r="9"/>';
   var ICON_COPY = '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>';
   var ICON_COPIED = '<path d="M20 6 9 17l-5-5"/>';
+  var ICON_EDIT = '<path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z"/><path d="m13.5 7.5 3 3"/>';
   var ICON_EYE = '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
   var ICON_EYE_OFF = '<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24M6.1 6.1C3.6 7.7 2 12 2 12s3.5 7 10 7c2 0 3.8-.6 5.3-1.5M10 5.2c.6-.1 1.3-.2 2-.2 6.5 0 10 7 10 7s-.8 1.6-2.2 3.2M2 2l20 20"/>';
 
@@ -35,14 +36,24 @@
     return node;
   }
 
-  /* ================= 底部标签切换 ================= */
+  /* ================= 主导航 ================= */
   var tabs = document.querySelectorAll('.tabbar .tab');
   tabs.forEach(function (tab) {
     tab.addEventListener('click', function () {
-      tabs.forEach(function (t) { t.classList.remove('active'); });
+      var changingPage = !tab.classList.contains('active');
+      tabs.forEach(function (t) {
+        t.classList.remove('active');
+        t.removeAttribute('aria-current');
+      });
       tab.classList.add('active');
+      tab.setAttribute('aria-current', 'page');
       document.querySelectorAll('.page').forEach(function (p) { p.classList.remove('active'); });
       $('#page-' + tab.dataset.page).classList.add('active');
+      if (changingPage) window.scrollTo(0, 0);
+      if (tab.dataset.page === 'tools') {
+        renderTodos();
+        if ($('#tool-schedule').classList.contains('active')) showTodaySchedule();
+      }
     });
   });
 
@@ -101,10 +112,14 @@
   var birthdays = store.get('birthdays', []);
   var personalEvents = store.get('personalEvents', []);
   var recordKind = 'birthday';
+  var weekdays = '日一二三四五六';
 
   function renderCalendar() {
     var today = new Date();
     var todayKey = LifeCalendar.getDayInfo(today.getFullYear(), today.getMonth() + 1, today.getDate()).key;
+    $('#home-date').dateTime = todayKey;
+    $('#home-date-day').textContent = today.getDate();
+    $('#home-date-label').textContent = (today.getMonth() + 1) + '月 · 周' + weekdays[today.getDay()];
     var selected = LifeCalendar.getDayInfo(calendarYear, calendarMonth, calendarSelected);
     var selectedEntries = LifeCalendar.getPersonalEntries(selected.key, birthdays, personalEvents);
     $('#calendar-month').textContent = calendarYear + ' 年 ' + calendarMonth + ' 月';
@@ -155,8 +170,8 @@
     });
     var detail = $('#calendar-detail');
     detail.innerHTML = '';
-    var heading = el('h4');
-    heading.textContent = calendarMonth + '月' + calendarSelected + '日 · 周' + '日一二三四五六'[selected.weekday];
+    var heading = el('h2');
+    heading.textContent = calendarMonth + '月' + calendarSelected + '日 · 周' + weekdays[selected.weekday];
     if (selected.key === todayKey) heading.textContent += ' · 今天';
     var lunar = el('p', 'calendar-lunar');
     lunar.textContent = '农历 ' + selected.lunar;
@@ -171,7 +186,7 @@
       var dayList = el('ul', 'day-events');
       selectedEntries.forEach(function (entry) {
         var item = el('li');
-        var title = el('h5');
+        var title = el('h3');
         title.textContent = entry.title;
         item.appendChild(title);
         if (entry.note) {
@@ -370,6 +385,11 @@
 
   function renderLinks() {
     linkList.innerHTML = '';
+    if (!links.length) {
+      var empty = el('li', 'list-empty');
+      empty.textContent = '暂无链接';
+      linkList.appendChild(empty);
+    }
     links.forEach(function (link, i) {
       var li = el('li', 'link-item');
       li.dataset.linkIndex = i;
@@ -447,29 +467,84 @@
   segments.forEach(function (seg) {
     seg.addEventListener('click', function () {
       var page = seg.closest('.page');
-      page.querySelectorAll('[data-tool]').forEach(function (s) { s.classList.remove('active'); });
-      seg.classList.add('active');
+      page.querySelectorAll('[data-tool]').forEach(function (s) { setSelectedTab(s, s === seg); });
       page.querySelectorAll('.tool-panel').forEach(function (p) { p.classList.remove('active'); });
       $('#tool-' + seg.dataset.tool).classList.add('active');
+      if (seg.dataset.tool === 'schedule') showTodaySchedule();
+      if (seg.dataset.tool === 'todo') renderTodos();
+    });
+  });
+
+  function setSelectedTab(tab, selected) {
+    tab.classList.toggle('active', selected);
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  }
+
+  document.querySelectorAll('.segmented[role="tablist"]').forEach(function (list) {
+    var buttons = Array.from(list.querySelectorAll('[role="tab"]'));
+    buttons.forEach(function (button) { setSelectedTab(button, button.classList.contains('active')); });
+    list.addEventListener('keydown', function (event) {
+      var index = buttons.indexOf(event.target);
+      if (index === -1) return;
+      if (event.key === 'ArrowLeft') index = (index - 1 + buttons.length) % buttons.length;
+      else if (event.key === 'ArrowRight') index = (index + 1) % buttons.length;
+      else if (event.key === 'Home') index = 0;
+      else if (event.key === 'End') index = buttons.length - 1;
+      else return;
+      event.preventDefault();
+      buttons[index].click();
+      buttons[index].focus();
     });
   });
 
   /* ================= 待办 ================= */
   var todos = store.get('todos', []);
   var todoList = $('#todo-list');
+  var todoArchive = $('#todo-archive');
+  var todoArchiveList = $('#todo-archive-list');
+  var todoArchiveTimer;
+  var normalizedTodos = TodoManager.normalize(todos, new Date().toISOString());
+  if (JSON.stringify(normalizedTodos) !== JSON.stringify(todos)) {
+    if (store.set('todos', normalizedTodos)) todos = normalizedTodos;
+    else $('#todo-feedback').textContent = '保存失败，旧待办的完成时间尚未保存，请检查浏览器本地存储权限后重试。';
+  }
+
+  function saveTodos(next) {
+    next = TodoManager.normalize(next, new Date().toISOString());
+    if (!store.set('todos', next)) {
+      $('#todo-feedback').textContent = '保存失败，请检查浏览器本地存储权限后重试。';
+      return false;
+    }
+    todos = next;
+    $('#todo-feedback').textContent = '';
+    renderTodos();
+    return true;
+  }
 
   function renderTodos() {
+    clearTimeout(todoArchiveTimer);
+    var now = new Date();
+    var groups = TodoManager.partition(todos, now.toISOString());
     todoList.innerHTML = '';
-    todos.forEach(function (todo, i) {
+    todoArchiveList.innerHTML = '';
+    todoArchive.hidden = !groups.archived.length;
+    $('#todo-archive-summary').textContent = '已归档（' + groups.archived.length + '）';
+    if (!groups.archived.length) todoArchive.open = false;
+    if (!groups.active.length) {
+      var empty = el('li', 'list-empty');
+      empty.textContent = '暂无待办';
+      todoList.appendChild(empty);
+    }
+    groups.active.concat(groups.archived).forEach(function (todo) {
       var li = el('li', 'item' + (todo.done ? ' done' : ''));
       var check = el('button', 'icon-btn check-btn');
       check.title = todo.done ? '标记未完成' : '标记完成';
       check.setAttribute('aria-label', check.title);
+      check.setAttribute('aria-pressed', String(todo.done));
       check.innerHTML = svgIcon(todo.done ? ICON_CHECK : ICON_CIRCLE);
       check.addEventListener('click', function () {
-        todo.done = !todo.done;
-        store.set('todos', todos);
-        renderTodos();
+        saveTodos(TodoManager.toggle(todos, todos.indexOf(todo), new Date().toISOString()));
       });
       var text = el('div', 'item-text');
       text.textContent = todo.text;
@@ -478,25 +553,29 @@
       del.setAttribute('aria-label', '删除待办');
       del.innerHTML = svgIcon(ICON_TRASH);
       del.addEventListener('click', function () {
-        todos.splice(i, 1);
-        store.set('todos', todos);
-        renderTodos();
+        var next = todos.slice();
+        next.splice(todos.indexOf(todo), 1);
+        saveTodos(next);
       });
       li.appendChild(check);
       li.appendChild(text);
       li.appendChild(del);
-      todoList.appendChild(li);
+      (groups.archived.indexOf(todo) === -1 ? todoList : todoArchiveList).appendChild(li);
     });
+    var nextArchive = Infinity;
+    groups.active.forEach(function (todo) {
+      if (!todo.done) return;
+      var remaining = Date.parse(todo.completedAt) + 604800000 - now.getTime();
+      if (remaining > 0) nextArchive = Math.min(nextArchive, remaining);
+    });
+    if (isFinite(nextArchive)) todoArchiveTimer = setTimeout(renderTodos, Math.min(nextArchive, 2147483647));
   }
 
   $('#todo-form').addEventListener('submit', function (e) {
     e.preventDefault();
     var text = $('#todo-input').value.trim();
     if (!text) return;
-    todos.unshift({ text: text, done: false });
-    store.set('todos', todos);
-    e.target.reset();
-    renderTodos();
+    if (saveTodos([{ text: text, done: false }].concat(todos))) e.target.reset();
   });
 
   /* ================= 课表 ================= */
@@ -532,8 +611,9 @@
   }
   var WEEK_MIN, WEEK_MAX;
   function updateScheduleBounds() {
-    WEEK_MIN = Infinity;
-    WEEK_MAX = -Infinity;
+    var currentWeek = Math.min(60, Math.max(1, ScheduleDate.getCurrent(new Date()).week));
+    WEEK_MIN = currentWeek;
+    WEEK_MAX = currentWeek;
     COURSES.forEach(function (course) {
       course.weeks.forEach(function (week) {
         WEEK_MIN = Math.min(WEEK_MIN, week);
@@ -542,10 +622,22 @@
     });
   }
   updateScheduleBounds();
-  var scheduleWeek = store.get('scheduleWeek', 10);
-  scheduleWeek = Math.min(WEEK_MAX, Math.max(WEEK_MIN, scheduleWeek));
-  var jsDay = new Date().getDay(); // 0=周日
-  var scheduleDay = jsDay || 7;
+  var currentSchedule = ScheduleDate.getCurrent(new Date());
+  var scheduleWeek = Math.min(60, Math.max(1, currentSchedule.week));
+  var scheduleDay = currentSchedule.day;
+  var scheduleOutsideTerm = currentSchedule.week < 1 || currentSchedule.week > 60;
+  var scheduleDateKey = new Date().toDateString();
+
+  function showTodaySchedule() {
+    var now = new Date();
+    var current = ScheduleDate.getCurrent(now);
+    scheduleWeek = Math.min(60, Math.max(1, current.week));
+    scheduleDay = current.day;
+    scheduleOutsideTerm = current.week < 1 || current.week > 60;
+    scheduleDateKey = now.toDateString();
+    updateScheduleBounds();
+    renderSchedule();
+  }
 
   function periodText(course) {
     var groups = [];
@@ -566,16 +658,17 @@
   }
 
   function renderSchedule() {
-    $('#week-label').textContent = '第' + scheduleWeek + '周';
-    $('#week-prev').disabled = scheduleWeek <= WEEK_MIN;
-    $('#week-next').disabled = scheduleWeek >= WEEK_MAX;
+    $('#week-label').textContent = scheduleOutsideTerm ? '本学期外' : '第' + scheduleWeek + '周';
+    $('#week-prev').disabled = scheduleOutsideTerm ? scheduleWeek === 1 : scheduleWeek <= WEEK_MIN;
+    $('#week-next').disabled = scheduleOutsideTerm ? scheduleWeek === 60 : scheduleWeek >= WEEK_MAX;
     document.querySelectorAll('.day-tabs .segment').forEach(function (seg) {
-      seg.classList.toggle('active', parseInt(seg.dataset.day, 10) === scheduleDay);
+      setSelectedTab(seg, parseInt(seg.dataset.day, 10) === scheduleDay);
     });
+    $('#schedule-day-panel').setAttribute('aria-labelledby', 'schedule-day-' + scheduleDay);
     var list = $('#schedule-list');
     list.innerHTML = '';
     var todays = COURSES.filter(function (c) {
-      return c.day === scheduleDay && c.weeks.indexOf(scheduleWeek) !== -1;
+      return !scheduleOutsideTerm && c.day === scheduleDay && c.weeks.indexOf(scheduleWeek) !== -1;
     }).sort(function (a, b) { return a.periods[0] - b.periods[0]; });
     if (!todays.length) {
       var emptyLi = el('li', 'schedule-empty');
@@ -609,15 +702,17 @@
   }
 
   $('#week-prev').addEventListener('click', function () {
-    if (scheduleWeek > WEEK_MIN) {
-      scheduleWeek--;
+    if (scheduleOutsideTerm || scheduleWeek > WEEK_MIN) {
+      if (!scheduleOutsideTerm) scheduleWeek--;
+      scheduleOutsideTerm = false;
       store.set('scheduleWeek', scheduleWeek);
       renderSchedule();
     }
   });
   $('#week-next').addEventListener('click', function () {
-    if (scheduleWeek < WEEK_MAX) {
-      scheduleWeek++;
+    if (scheduleOutsideTerm || scheduleWeek < WEEK_MAX) {
+      if (!scheduleOutsideTerm) scheduleWeek++;
+      scheduleOutsideTerm = false;
       store.set('scheduleWeek', scheduleWeek);
       renderSchedule();
     }
@@ -635,11 +730,9 @@
       localStorage.setItem('importedSchedule', JSON.stringify({ version: 1, courses: courses }));
       COURSES = courses;
       updateScheduleBounds();
-      scheduleWeek = Math.min(WEEK_MAX, Math.max(WEEK_MIN, scheduleWeek));
-      store.set('scheduleWeek', scheduleWeek);
       $('#schedule-feedback').textContent = '课表已更新，共 ' + courses.length + ' 条课程。';
       $('#schedule-feedback').hidden = false;
-      renderSchedule();
+      showTodaySchedule();
     }
   });
 
@@ -647,6 +740,7 @@
   var accounts = store.get('accounts', []);
   var accountList = $('#account-list');
   var totpUpdaters = [];
+  var editingAccountIndex = -1;
 
   /* TOTP（兼容谷歌验证器）：Base32 解码 + HMAC-SHA1 */
   function base32Decode(str) {
@@ -720,6 +814,11 @@
   function renderAccounts() {
     accountList.innerHTML = '';
     totpUpdaters = [];
+    if (!accounts.length) {
+      var empty = el('li', 'list-empty');
+      empty.textContent = '暂无账号';
+      accountList.appendChild(empty);
+    }
     accounts.forEach(function (acc, i) {
       var li = el('li', 'item account-item');
       var wrap = el('div', 'item-text');
@@ -798,6 +897,12 @@
         eye.innerHTML = svgIcon(visible ? ICON_EYE_OFF : ICON_EYE);
       });
 
+      var edit = el('button', 'icon-btn account-edit');
+      edit.title = '修改账号';
+      edit.setAttribute('aria-label', '修改账号');
+      edit.innerHTML = svgIcon(ICON_EDIT);
+      edit.addEventListener('click', function () { openAccountDialog(i); });
+
       var del = el('button', 'icon-btn danger');
       del.title = '删除账号';
       del.setAttribute('aria-label', '删除账号');
@@ -811,6 +916,7 @@
       actions.appendChild(copyUser);
       actions.appendChild(copyPass);
       actions.appendChild(eye);
+      actions.appendChild(edit);
       actions.appendChild(del);
       li.appendChild(wrap);
       li.appendChild(actions);
@@ -825,30 +931,66 @@
     var user = $('#account-user').value.trim();
     var pass = $('#account-pass').value;
     var secret = $('#account-secret').value.trim();
-    if (!site || !user || !pass) { $('#account-form-feedback').textContent = '请填写平台、账号和密码。'; return; }
+    if (!site || !user || !pass) { $('#account-form-feedback').textContent = '请填写名称、账号和密码。'; return; }
     if (secret && !base32Decode(secret)) {
       $('#account-form-feedback').textContent = '2FA 密钥格式不正确，请检查后重试。';
       return;
     }
     var entry = { site: site, user: user, pass: pass };
     if (secret) entry.secret = secret.replace(/\s+/g, '').toUpperCase();
-    var next = [entry].concat(accounts);
+    var isEditing = editingAccountIndex >= 0;
+    var next = isEditing ? accounts.slice() : [entry].concat(accounts);
+    if (isEditing) next[editingAccountIndex] = entry;
     if (!store.set('accounts', next)) { $('#account-form-feedback').textContent = '保存失败，请检查浏览器本地存储权限后重试。'; return; }
     accounts = next;
+    editingAccountIndex = -1;
     e.target.reset();
     renderAccounts();
     $('#account-dialog').close();
-    $('#info-feedback').textContent = '账号已添加。';
+    $('#info-feedback').textContent = isEditing ? '账号已修改。' : '账号已添加。';
   });
 
-  $('#account-add-open').addEventListener('click', function () {
+  function openAccountDialog(index) {
+    var account = index >= 0 ? accounts[index] : null;
+    editingAccountIndex = account ? index : -1;
     $('#account-form').reset();
     $('#account-form-feedback').textContent = '';
+    $('#account-dialog-title').textContent = account ? '修改账号' : '添加账号';
+    $('#account-save').textContent = account ? '保存修改' : '保存账号';
+    if (account) {
+      $('#account-site').value = account.site;
+      $('#account-user').value = account.user;
+      $('#account-pass').value = account.pass;
+      $('#account-secret').value = account.secret || '';
+    }
     $('#account-dialog').showModal();
+  }
+
+  $('#account-add-open').addEventListener('click', function () {
+    openAccountDialog(-1);
   });
-  $('#account-dialog-close').addEventListener('click', function () { $('#account-dialog').close(); });
+  $('#account-dialog-close').addEventListener('click', function () {
+    editingAccountIndex = -1;
+    $('#account-dialog').close();
+  });
 
   /* ================= 初始化 ================= */
+  var dateRefreshTimer;
+  function refreshDateViews() {
+    if (document.hidden) return;
+    renderTodos();
+    if (new Date().toDateString() !== scheduleDateKey) {
+      renderCalendar();
+      showTodaySchedule();
+    }
+    clearTimeout(dateRefreshTimer);
+    var now = new Date();
+    var nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    dateRefreshTimer = setTimeout(refreshDateViews, nextDay.getTime() - now.getTime() + 50);
+  }
+  window.addEventListener('focus', refreshDateViews);
+  window.addEventListener('pageshow', refreshDateViews);
+  document.addEventListener('visibilitychange', refreshDateViews);
   BackupUI.init({
     getData: function () {
       return {
@@ -877,6 +1019,7 @@
   renderLinks();
   renderTodos();
   renderSchedule();
+  refreshDateViews();
   renderAccounts();
   tickTotp();
   setInterval(tickTotp, 1000);
