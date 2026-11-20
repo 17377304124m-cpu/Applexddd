@@ -14,6 +14,10 @@
     const endpoint = 'https://api.deepseek.com/chat/completions';
     const profilesKey = 'mingjunDeepSeekProfiles';
     const profileKey = 'mingjunDeepSeekSelectedProfile';
+    const models = [
+      { id: 'deepseek-flash', label: 'Flash' },
+      { id: 'deepseek-v4-pro', label: 'V4 Pro' }
+    ];
     const apiKeys = new Map();
     const pending = new Set();
     const failures = new Map();
@@ -28,11 +32,7 @@
           <button type="button" class="p-icon-btn" id="p-open-history" aria-label="打开对话历史" aria-haspopup="dialog" aria-controls="p-chat-history" title="对话历史"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-sidebar"></use></svg></button>
           <div class="p-chat-heading">
             <h1 id="p-chat-title">MingJun</h1>
-            <button type="button" class="p-model-link" data-open-config>
-              <span></span><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-next"></use></svg>
-            </button>
           </div>
-          <button type="button" class="p-icon-btn" id="p-new-chat" aria-label="新对话" title="新对话"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-new-chat"></use></svg></button>
         </header>
         <div class="p-chat-scroll">
           <section class="p-welcome" aria-labelledby="p-welcome-title">
@@ -54,9 +54,21 @@
         <footer class="p-composer">
           <button type="button" class="p-icon-btn p-latest" aria-label="跳到最新消息" title="跳到最新消息" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-down"></use></svg></button>
           <p class="p-composer-status" role="status"></p>
-          <label class="p-message-label" for="p-message">发给小P</label>
+          <div class="p-model-controls">
+            <div class="p-model-picker" hidden>
+              <select id="p-active-model" aria-label="切换模型">
+                ${models.map(({ id, label }) => `<option value="${id}">${label}</option>`).join('')}
+              </select>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <button type="button" class="p-model-link" data-open-config aria-label="配置模型" title="配置模型">
+              <span>配置模型</span>
+              <svg class="p-model-arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-next"></use></svg>
+              <svg class="p-model-settings" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><use href="#mj-icon-settings"></use></svg>
+            </button>
+          </div>
           <form id="p-message-form" class="p-message-form">
-            <textarea id="p-message" rows="1" maxlength="${messageLimit}" placeholder="输入消息…" enterkeyhint="send" required></textarea>
+            <textarea id="p-message" aria-label="输入消息" rows="1" maxlength="${messageLimit}" placeholder="输入消息…" enterkeyhint="send" required></textarea>
             <button type="submit" class="p-icon-btn p-send" aria-label="发送消息" title="发送消息"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-up"></use></svg></button>
           </form>
         </footer>
@@ -64,11 +76,27 @@
       <dialog class="p-history" id="p-chat-history" aria-labelledby="p-history-title">
         <div class="p-history-inner">
           <header>
-            <h2 id="p-history-title">对话历史</h2>
-            <button type="button" class="p-icon-btn" id="p-close-history" aria-label="关闭对话历史"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-close"></use></svg></button>
+            <h2 id="p-history-title" tabindex="-1" autofocus>对话历史</h2>
           </header>
-          <button type="button" class="p-primary p-history-new">新对话</button>
+          <button type="button" class="p-secondary p-history-new">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-new-chat"></use></svg>新对话
+          </button>
           <div class="p-history-list"></div>
+          <p class="p-history-status life-feedback" role="status"></p>
+        </div>
+        <div class="p-history-edge" aria-hidden="true"></div>
+      </dialog>
+      <dialog class="life-dialog p-image-preview" id="p-image-preview" aria-labelledby="p-image-title">
+        <div class="life-dialog-body">
+          <header class="life-dialog-header">
+            <h2 id="p-image-title" tabindex="-1" autofocus>回复图片</h2>
+            <button type="button" class="p-icon-btn" id="p-close-image" aria-label="关闭图片预览"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-close"></use></svg></button>
+          </header>
+          <img alt="小P 回复图片">
+          <div class="backup-actions">
+            <a class="btn primary" download="MingJun-小P回复.png">保存图片</a>
+          </div>
+          <p class="life-hint">也可以长按图片复制或分享。</p>
         </div>
       </dialog>
     `;
@@ -117,10 +145,20 @@
     `;
 
     const history = task.querySelector('.p-history');
+    const historyButton = task.querySelector('#p-open-history');
     const historyList = task.querySelector('.p-history-list');
+    const historyStatus = task.querySelector('.p-history-status');
+    const newChat = task.querySelector('.p-history-new');
+    const imagePreview = task.querySelector('#p-image-preview');
+    const previewImage = imagePreview.querySelector('img');
+    const saveImage = imagePreview.querySelector('a');
     const title = task.querySelector('#p-chat-title');
     const modelLink = task.querySelector('.p-model-link');
     const modelLabel = modelLink.querySelector('span');
+    const modelArrow = modelLink.querySelector('.p-model-arrow');
+    const modelSettings = modelLink.querySelector('.p-model-settings');
+    const modelPicker = task.querySelector('.p-model-picker');
+    const modelSelect = task.querySelector('#p-active-model');
     const scroller = task.querySelector('.p-chat-scroll');
     const welcome = task.querySelector('.p-welcome');
     const messages = task.querySelector('.p-messages');
@@ -147,6 +185,12 @@
     const memorySize = memory.querySelector('#p-memory-size');
     const memoryStatus = memory.querySelector('#p-memory-status');
     const dateFormat = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' });
+    const viewport = window.visualViewport;
+    let restingHeight = viewport?.height || window.innerHeight;
+    let restingWidth = window.innerWidth;
+    let viewportFrame = 0;
+    let followLatest = true;
+    let previewUrl = '';
 
     function readPreference(key) {
       try {
@@ -212,10 +256,70 @@
 
     function showLatest() {
       scroller.scrollTop = scroller.scrollHeight;
+      followLatest = true;
     }
 
     function updateScroller() {
-      latest.hidden = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      latest.hidden = distance < 120;
+      followLatest = distance < 24;
+    }
+
+    function syncKeyboardViewport() {
+      viewportFrame = 0;
+      const height = viewport?.height || window.innerHeight;
+      const focused = document.activeElement === messageInput;
+      const wasOpen = task.classList.contains('p-keyboard-open');
+      if (restingWidth !== window.innerWidth) {
+        restingWidth = window.innerWidth;
+        restingHeight = Math.max(window.innerHeight, height);
+      }
+      const touchScreen = window.matchMedia('(any-pointer: coarse)').matches;
+      const availableHeight = touchScreen ? Math.max(restingHeight, window.innerHeight) : window.innerHeight;
+      const keyboardOpen = touchScreen && task.classList.contains('active') && (focused || wasOpen) &&
+        Math.abs((viewport?.scale || 1) - 1) < 0.02 && availableHeight - height > 100;
+      const shouldFollow = followLatest;
+      task.classList.toggle('p-keyboard-open', keyboardOpen);
+      if (keyboardOpen) {
+        task.style.setProperty('--p-viewport-height', `${height}px`);
+        task.style.setProperty('--p-viewport-top', `${viewport?.offsetTop || 0}px`);
+      } else if (!focused) {
+        restingHeight = height;
+      }
+      if (keyboardOpen || wasOpen) {
+        if (shouldFollow) showLatest();
+        updateScroller();
+      }
+    }
+
+    function queueViewportSync() {
+      if (!viewportFrame) viewportFrame = requestAnimationFrame(syncKeyboardViewport);
+    }
+
+    async function copyReplyImage(content, button) {
+      const dark = document.documentElement.dataset.theme === 'dark';
+      const png = Promise.resolve().then(() => ReplyImage.create(content, dark));
+      try {
+        if (navigator.clipboard?.write && window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+          status(composerStatus, '已复制回复图片');
+          return;
+        }
+      } catch {
+        // Safari can restrict clipboard writes in some embedded views.
+      }
+      try {
+        const image = await png;
+        if (!button.isConnected || !task.classList.contains('active')) return;
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = URL.createObjectURL(image);
+        previewImage.src = previewUrl;
+        saveImage.href = previewUrl;
+        button.focus({ preventScroll: true });
+        if (!imagePreview.open) imagePreview.showModal();
+      } catch {
+        status(composerStatus, '无法生成回复图片，请重试。', true);
+      }
     }
 
     function renderHistory() {
@@ -229,10 +333,20 @@
         return;
       }
       for (const chat of chats) {
+        const row = document.createElement('div');
+        row.className = 'p-history-row';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'p-history-delete';
+        remove.dataset.chatDelete = chat.id;
+        remove.setAttribute('aria-label', `删除对话「${chat.title}」`);
+        remove.textContent = '删除';
+        remove.hidden = true;
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'p-history-item';
         button.dataset.chatId = chat.id;
+        button.setAttribute('aria-keyshortcuts', 'ArrowRight Delete');
         if (chat.id === activeId) button.setAttribute('aria-current', 'true');
         const name = document.createElement('span');
         name.textContent = chat.title;
@@ -244,18 +358,73 @@
           time.textContent = dateFormat.format(date);
           button.append(time);
         }
-        historyList.append(button);
+        row.append(remove, button);
+        historyList.append(row);
       }
+    }
+
+    function revealHistoryRow(row, opened) {
+      const previous = historyList.querySelector('.p-history-row.is-revealed');
+      if (previous && previous !== row) {
+        previous.classList.remove('is-revealed');
+        previous.querySelector('.p-history-delete').hidden = true;
+      }
+      row.classList.toggle('is-revealed', opened);
+      row.querySelector('.p-history-delete').hidden = !opened;
+    }
+
+    function deleteHistoryChat(id) {
+      const chat = readHistory().find(item => item.id === id);
+      if (!chat || !window.confirm(`删除对话「${chat.title}」？`)) return;
+      const chats = readHistory();
+      const index = chats.findIndex(chat => chat.id === id);
+      try {
+        localStorage.setItem('chatHistory', JSON.stringify(chats.filter(chat => chat.id !== id)));
+      } catch {
+        status(historyStatus, '删除失败，请检查浏览器存储权限后重试。', true);
+        return;
+      }
+      failures.delete(id);
+      if (activeId === id) {
+        activeId = null;
+        messageInput.value = '';
+        status(composerStatus, '');
+        renderChat();
+      }
+      renderHistory();
+      const buttons = historyList.querySelectorAll('.p-history-item');
+      (buttons[Math.min(index, buttons.length - 1)] || newChat).focus({ preventScroll: true });
+      status(historyStatus, '已删除对话。');
     }
 
     function selectedProfile() {
       return profiles.find(profile => profile.id === selectedId);
     }
 
+    function renderModel(profile) {
+      const customId = profile && !models.some(model => model.id === profile.model) ? profile.model : '';
+      const customOption = modelSelect.querySelector('option[data-custom]');
+      if (customOption && customOption.value !== customId) customOption.remove();
+      if (customId && customOption?.value !== customId) {
+        const option = new Option(customId, customId);
+        option.dataset.custom = '';
+        modelSelect.add(option);
+      }
+      modelPicker.hidden = !profile;
+      modelPicker.classList.toggle('is-connected', apiKeys.has(profile?.id));
+      modelSelect.value = profile?.model || models[0].id;
+      modelLabel.hidden = Boolean(profile);
+      modelArrow.toggleAttribute('hidden', Boolean(profile));
+      modelSettings.toggleAttribute('hidden', !profile);
+      modelLink.classList.toggle('is-settings', Boolean(profile));
+    }
+
     function updateSend() {
+      const shouldFollow = followLatest;
       send.disabled = messageInput.disabled || !messageInput.value.trim();
       messageInput.style.height = 'auto';
       messageInput.style.height = `${Math.min(132, messageInput.scrollHeight)}px`;
+      if (shouldFollow) showLatest();
     }
 
     function renderChat(scrollToLatest = false) {
@@ -264,8 +433,7 @@
       const profile = selectedProfile();
       const ready = apiKeys.has(profile?.id);
       title.textContent = chat?.title || 'MingJun';
-      modelLabel.textContent = ready ? profile.name : '配置模型';
-      modelLink.classList.toggle('is-connected', ready);
+      renderModel(profile);
       welcome.hidden = chatMessages.length > 0;
       messages.replaceChildren();
       for (const entry of chatMessages) {
@@ -284,20 +452,24 @@
         content.className = 'p-message-text';
         content.textContent = entry.content;
         article.append(content);
-        if (assistant && navigator.clipboard) {
-          const copy = document.createElement('button');
-          copy.type = 'button';
-          copy.className = 'p-text-btn p-copy';
-          copy.textContent = '复制';
+        if (assistant) {
+          const actions = document.createElement('div');
+          actions.className = 'p-message-actions';
+          actions.innerHTML = `
+            <button type="button" class="p-icon-btn p-copy" aria-label="复制回复文本" title="复制回复文本"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-copy"></use></svg></button>
+            <button type="button" class="p-icon-btn p-share" aria-label="复制回复图片" title="复制回复图片"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-share"></use></svg></button>
+          `;
+          const [copy, share] = actions.querySelectorAll('button');
           copy.addEventListener('click', async () => {
             try {
               await navigator.clipboard.writeText(entry.content);
-              status(composerStatus, '已复制');
+              status(composerStatus, '已复制回复文本');
             } catch {
               status(composerStatus, '复制失败，请选中内容后复制。', true);
             }
           });
-          article.append(copy);
+          share.addEventListener('click', () => void copyReplyImage(entry.content, share));
+          article.append(actions);
         }
         messages.append(article);
       }
@@ -410,6 +582,11 @@
       renderChat();
     }
 
+    function saveProfiles(next) {
+      localStorage.setItem(profilesKey, JSON.stringify(next));
+      profiles = next;
+    }
+
     function renderProfiles() {
       profileList.replaceChildren();
       profileHint.textContent = profiles.length ? '' : '添加一个方案，即可开始使用小P。';
@@ -448,7 +625,7 @@
       editingId = profile?.id || null;
       profileTitle.textContent = profile ? '编辑方案' : '添加方案';
       profileName.value = profile?.name || 'DeepSeek';
-      profileModel.value = profile?.model || 'deepseek-flash';
+      profileModel.value = profile?.model || models[0].id;
       profileSecret.value = '';
       profileSecret.required = !hasKey;
       profileKeyHint.textContent = hasKey ? '留空会继续使用本次已填写的 Key。' : '请输入你在 DeepSeek 开放平台创建的 API Key。';
@@ -472,20 +649,50 @@
     renderChat();
     renderProfiles();
 
-    task.querySelector('#p-open-history').addEventListener('click', () => {
+    historyButton.addEventListener('click', () => {
+      status(historyStatus, '');
       renderHistory();
+      historyButton.focus({ preventScroll: true });
       history.showModal();
+      history.querySelector('#p-history-title').focus({ preventScroll: true });
     });
-    task.querySelector('#p-close-history').addEventListener('click', () => history.close());
-    history.addEventListener('click', event => {
-      if (event.target === history) history.close();
+    history.addEventListener('close', () => {
+      if (task.classList.contains('active')) historyButton.focus({ preventScroll: true });
+    });
+    MobileSwipes.bindHistory(history, {
+      reveal: revealHistoryRow,
+      close: () => history.close()
     });
     historyList.addEventListener('click', event => {
+      const remove = event.target.closest('button[data-chat-delete]');
+      if (remove) {
+        deleteHistoryChat(remove.dataset.chatDelete);
+        return;
+      }
       const target = event.target.closest('button[data-chat-id]');
-      if (target) selectChat(target.dataset.chatId);
+      if (!target) return;
+      const row = target.closest('.p-history-row');
+      if (row.classList.contains('is-revealed')) revealHistoryRow(row, false);
+      else selectChat(target.dataset.chatId);
     });
-    task.querySelector('#p-new-chat').addEventListener('click', () => selectChat(null));
-    task.querySelector('.p-history-new').addEventListener('click', () => selectChat(null));
+    historyList.addEventListener('keydown', event => {
+      const item = event.target.closest('.p-history-item');
+      if (event.key === 'Delete' && item) {
+        event.preventDefault();
+        deleteHistoryChat(item.dataset.chatId);
+      } else if (event.key === 'ArrowRight' && item) {
+        event.preventDefault();
+        const row = item.closest('.p-history-row');
+        revealHistoryRow(row, true);
+        row.querySelector('.p-history-delete').focus();
+      } else if (event.key === 'ArrowLeft' && event.target.closest('.p-history-delete')) {
+        event.preventDefault();
+        const row = event.target.closest('.p-history-row');
+        revealHistoryRow(row, false);
+        row.querySelector('.p-history-item').focus();
+      }
+    });
+    newChat.addEventListener('click', () => selectChat(null));
     task.querySelector('.p-starters').addEventListener('click', event => {
       if (!event.target.dataset.pPrompt) return;
       messageInput.value = event.target.dataset.pPrompt;
@@ -495,6 +702,18 @@
     latest.addEventListener('click', showLatest);
     scroller.addEventListener('scroll', updateScroller, { passive: true });
     messageInput.addEventListener('input', updateSend);
+    messageInput.addEventListener('focus', queueViewportSync);
+    messageInput.addEventListener('blur', queueViewportSync);
+    viewport?.addEventListener('resize', queueViewportSync);
+    viewport?.addEventListener('scroll', queueViewportSync);
+    window.addEventListener('resize', queueViewportSync);
+    task.querySelector('#p-close-image').addEventListener('click', () => imagePreview.close());
+    imagePreview.addEventListener('close', () => {
+      previewImage.removeAttribute('src');
+      saveImage.removeAttribute('href');
+      URL.revokeObjectURL(previewUrl);
+      previewUrl = '';
+    });
     messageInput.addEventListener('keydown', event => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
         event.preventDefault();
@@ -544,6 +763,24 @@
       if (chat?.messages.at(-1)?.role === 'user') void requestReply(chat);
     });
 
+    modelSelect.addEventListener('change', () => {
+      const profile = selectedProfile();
+      if (!profile || profile.model === modelSelect.value) return;
+      const model = modelSelect.value;
+      try {
+        const saved = readProfiles();
+        if (!saved.some(item => item.id === profile.id)) throw new Error();
+        saveProfiles(saved.map(item => item.id === profile.id ? { ...item, model } : item));
+      } catch {
+        modelSelect.value = profile.model;
+        status(composerStatus, '模型切换未保存，请检查浏览器存储权限。', true);
+        return;
+      }
+      renderModel(selectedProfile());
+      renderProfiles();
+      status(composerStatus, '');
+    });
+
     addProfile.addEventListener('click', () => showProfileForm());
     config.querySelector('#p-cancel-profile').addEventListener('click', () => {
       hideProfileForm();
@@ -579,13 +816,12 @@
       const saved = readProfiles();
       const next = editingId ? saved.map(item => item.id === editingId ? profile : item) : [...saved, profile];
       try {
-        localStorage.setItem(profilesKey, JSON.stringify(next));
+        saveProfiles(next);
       } catch {
         status(profileStatus, '模型方案保存失败，请检查浏览器存储权限。', true);
         return;
       }
       if (key) apiKeys.set(profile.id, key);
-      profiles = next;
       setProfile(editingId && apiKeys.has(selectedId) ? selectedId : profile.id);
       hideProfileForm();
       status(profileStatus, '已保存方案，可以回到任务页对话。');

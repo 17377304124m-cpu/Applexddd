@@ -63,6 +63,58 @@
     }, true);
   }
 
+  function bindHistory(dialog, handlers) {
+    if (!dialog || boundScopes.has(dialog)) return;
+    boundScopes.add(dialog);
+    var gesture = null;
+    var suppressClickUntil = 0;
+
+    dialog.addEventListener('pointerdown', function (event) {
+      gesture = null;
+      if (!event.isPrimary || event.button !== 0) return;
+      suppressClickUntil = 0;
+      var edge = event.target.closest('.p-history-edge');
+      var item = event.target.closest('.p-history-item');
+      var row = item && item.closest('.p-history-row');
+      if (!edge && !row) return;
+      gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, started: Date.now(), row: row, horizontal: false };
+    });
+
+    dialog.addEventListener('pointermove', function (event) {
+      if (!gesture || event.pointerId !== gesture.id) return;
+      if (event.pointerType === 'mouse' && !event.buttons) { gesture = null; return; }
+      var dx = Math.abs(event.clientX - gesture.x);
+      var dy = Math.abs(event.clientY - gesture.y);
+      if (!gesture.horizontal) {
+        if (dy > 10 && dy >= dx) { gesture = null; return; }
+        if (dx <= 14 || dx < dy * 1.6) return;
+        gesture.horizontal = true;
+        if (event.pointerType === 'mouse') dialog.setPointerCapture(event.pointerId);
+      }
+    });
+
+    dialog.addEventListener('pointerup', function (event) {
+      if (!gesture || event.pointerId !== gesture.id) return;
+      var current = gesture;
+      gesture = null;
+      var direction = getSwipeDirection(event.clientX - current.x, event.clientY - current.y, Date.now() - current.started);
+      if (current.horizontal || direction) suppressClickUntil = Date.now() + 550;
+      if (!direction) return;
+      if (current.row) handlers.reveal(current.row, direction < 0);
+      else if (direction > 0) handlers.close();
+    });
+
+    dialog.addEventListener('pointercancel', function (event) {
+      if (gesture && event.pointerId === gesture.id) gesture = null;
+    });
+    dialog.addEventListener('click', function (event) {
+      if (event.isTrusted && event.detail > 0 && Date.now() < suppressClickUntil) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
   function init() {
     var page = root.document.querySelector('#page-info');
     bind(page, function (direction) {
@@ -76,7 +128,7 @@
     }, true);
   }
 
-  var api = { init: init, getSwipeDirection: getSwipeDirection };
+  var api = { init: init, bindHistory: bindHistory, getSwipeDirection: getSwipeDirection };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.MobileSwipes = api;
 })(typeof window === 'object' ? window : globalThis);
