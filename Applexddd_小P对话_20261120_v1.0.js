@@ -19,7 +19,8 @@
       { id: 'deepseek-v4-pro', label: 'V4 Pro' }
     ];
     const apiKeys = new Map();
-    const pending = new Set();
+    const pending = new Map();
+    const replyThoughts = new Map();
     const failures = new Map();
     let activeId = null;
     let selectedId = readPreference(profileKey);
@@ -56,10 +57,10 @@
           <p class="p-composer-status" role="status"></p>
           <div class="p-model-controls">
             <div class="p-model-picker" hidden>
-              <select id="p-active-model" aria-label="切换模型">
-                ${models.map(({ id, label }) => `<option value="${id}">${label}</option>`).join('')}
-              </select>
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>
+              <button type="button" id="p-active-model" aria-label="切换模型" aria-haspopup="menu" aria-expanded="false" aria-controls="p-model-menu">
+                <span class="p-model-chip"><span class="p-model-current"></span><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></span>
+              </button>
+              <div id="p-model-menu" class="p-model-menu" role="menu" aria-label="选择模型" hidden></div>
             </div>
             <button type="button" class="p-model-link" data-open-config aria-label="配置模型" title="配置模型">
               <span>配置模型</span>
@@ -158,7 +159,9 @@
     const modelArrow = modelLink.querySelector('.p-model-arrow');
     const modelSettings = modelLink.querySelector('.p-model-settings');
     const modelPicker = task.querySelector('.p-model-picker');
-    const modelSelect = task.querySelector('#p-active-model');
+    const modelButton = task.querySelector('#p-active-model');
+    const modelCurrent = task.querySelector('.p-model-current');
+    const modelMenu = task.querySelector('#p-model-menu');
     const scroller = task.querySelector('.p-chat-scroll');
     const welcome = task.querySelector('.p-welcome');
     const messages = task.querySelector('.p-messages');
@@ -385,6 +388,7 @@
         return;
       }
       failures.delete(id);
+      replyThoughts.delete(id);
       if (activeId === id) {
         activeId = null;
         messageInput.value = '';
@@ -402,21 +406,44 @@
     }
 
     function renderModel(profile) {
-      const customId = profile && !models.some(model => model.id === profile.model) ? profile.model : '';
-      const customOption = modelSelect.querySelector('option[data-custom]');
-      if (customOption && customOption.value !== customId) customOption.remove();
-      if (customId && customOption?.value !== customId) {
-        const option = new Option(customId, customId);
-        option.dataset.custom = '';
-        modelSelect.add(option);
-      }
       modelPicker.hidden = !profile;
       modelPicker.classList.toggle('is-connected', apiKeys.has(profile?.id));
-      modelSelect.value = profile?.model || models[0].id;
+      const label = models.find(model => model.id === profile?.model)?.label || profile?.model || '';
+      modelCurrent.textContent = label;
+      modelButton.setAttribute('aria-label', label ? `切换模型，当前为 ${label}` : '切换模型');
+      if (!profile) closeModelMenu();
       modelLabel.hidden = Boolean(profile);
       modelArrow.toggleAttribute('hidden', Boolean(profile));
       modelSettings.toggleAttribute('hidden', !profile);
       modelLink.classList.toggle('is-settings', Boolean(profile));
+    }
+
+    function closeModelMenu(restoreFocus = false) {
+      modelMenu.hidden = true;
+      modelButton.setAttribute('aria-expanded', 'false');
+      if (restoreFocus) modelButton.focus({ preventScroll: true });
+    }
+
+    function openModelMenu(direction = 0) {
+      const profile = selectedProfile();
+      if (!profile) return;
+      const options = models.some(model => model.id === profile.model)
+        ? models : [...models, { id: profile.model, label: profile.model }];
+      modelMenu.replaceChildren(...options.map(({ id, label }) => {
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.tabIndex = -1;
+        option.setAttribute('role', 'menuitemradio');
+        option.setAttribute('aria-checked', String(profile.model === id));
+        option.dataset.model = id;
+        option.textContent = label;
+        return option;
+      }));
+      modelMenu.hidden = false;
+      modelButton.setAttribute('aria-expanded', 'true');
+      const selected = direction < 0 ? modelMenu.lastElementChild
+        : direction > 0 ? modelMenu.firstElementChild : modelMenu.querySelector('[aria-checked="true"]');
+      selected?.focus({ preventScroll: true });
     }
 
     function updateSend() {
@@ -425,6 +452,59 @@
       messageInput.style.height = 'auto';
       messageInput.style.height = `${Math.min(132, messageInput.scrollHeight)}px`;
       if (shouldFollow) showLatest();
+    }
+
+    function renderAssistant(content, reasoning = '', isStreaming = false) {
+      const article = document.createElement('article');
+      article.className = 'p-message p-assistant';
+      article.setAttribute('aria-label', '小P');
+      article.innerHTML = `
+        <span class="p-response-avatar" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><use href="#mj-icon-assistant"></use></svg></span>
+        <div class="p-response-bubble">
+          <details class="p-reasoning" hidden>
+            <summary>思考过程</summary>
+            <div class="p-reasoning-text"></div>
+          </details>
+          <div class="p-message-text p-formatted" hidden></div>
+        </div>`;
+      const bubble = article.querySelector('.p-response-bubble');
+      const thought = article.querySelector('.p-reasoning');
+      const summary = thought.querySelector('summary');
+      const thoughtText = article.querySelector('.p-reasoning-text');
+      const answer = article.querySelector('.p-formatted');
+      const update = (nextContent, nextReasoning) => {
+        if (nextReasoning.trim()) {
+          if (thought.hidden && isStreaming) thought.open = true;
+          thought.hidden = false;
+          summary.textContent = isStreaming && !nextContent.trim() ? '正在思考' : '思考过程';
+          if (thoughtText.textContent !== nextReasoning) thoughtText.textContent = nextReasoning;
+        }
+        if (nextContent !== content || answer.hidden) {
+          answer.hidden = !nextContent.trim();
+          if (!answer.hidden) ChatMarkup.render(answer, nextContent);
+          content = nextContent;
+        }
+      };
+      update(content, reasoning);
+      if (!isStreaming) {
+        const actions = document.createElement('div');
+        actions.className = 'p-message-actions';
+        actions.innerHTML = `
+          <button type="button" class="p-icon-btn p-copy" aria-label="复制回复文本" title="复制回复文本"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-copy"></use></svg></button>
+          <button type="button" class="p-icon-btn p-share" aria-label="复制回复图片" title="复制回复图片"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-share"></use></svg></button>`;
+        const [copy, share] = actions.querySelectorAll('button');
+        copy.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(ChatMarkup.plainText(content));
+            status(composerStatus, '已复制回复文本');
+          } catch {
+            status(composerStatus, '复制失败，请选中内容后复制。', true);
+          }
+        });
+        share.addEventListener('click', () => void copyReplyImage(ChatMarkup.plainText(content), share));
+        bubble.append(actions);
+      }
+      return { article, update };
     }
 
     function renderChat(scrollToLatest = false) {
@@ -436,51 +516,35 @@
       renderModel(profile);
       welcome.hidden = chatMessages.length > 0;
       messages.replaceChildren();
-      for (const entry of chatMessages) {
+      const thoughts = replyThoughts.get(activeId);
+      for (const [index, entry] of chatMessages.entries()) {
         if (!entry || typeof entry.content !== 'string') continue;
-        const assistant = entry.role === 'assistant';
-        const article = document.createElement('article');
-        article.className = assistant ? 'p-message p-assistant' : 'p-message p-user';
-        article.setAttribute('aria-label', assistant ? '小P' : '你');
-        if (assistant) {
-          const label = document.createElement('div');
-          label.className = 'p-message-author';
-          label.textContent = '小P';
-          article.append(label);
+        if (entry.role === 'assistant') {
+          messages.append(renderAssistant(entry.content, thoughts?.get(index)).article);
+          continue;
         }
+        const article = document.createElement('article');
+        article.className = 'p-message p-user';
+        article.setAttribute('aria-label', '你');
         const content = document.createElement('p');
         content.className = 'p-message-text';
         content.textContent = entry.content;
         article.append(content);
-        if (assistant) {
-          const actions = document.createElement('div');
-          actions.className = 'p-message-actions';
-          actions.innerHTML = `
-            <button type="button" class="p-icon-btn p-copy" aria-label="复制回复文本" title="复制回复文本"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-copy"></use></svg></button>
-            <button type="button" class="p-icon-btn p-share" aria-label="复制回复图片" title="复制回复图片"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-share"></use></svg></button>
-          `;
-          const [copy, share] = actions.querySelectorAll('button');
-          copy.addEventListener('click', async () => {
-            try {
-              await navigator.clipboard.writeText(entry.content);
-              status(composerStatus, '已复制回复文本');
-            } catch {
-              status(composerStatus, '复制失败，请选中内容后复制。', true);
-            }
-          });
-          share.addEventListener('click', () => void copyReplyImage(entry.content, share));
-          article.append(actions);
-        }
         messages.append(article);
       }
 
       const awaiting = chatMessages.at(-1)?.role === 'user';
-      const loading = pending.has(activeId);
+      const loading = awaiting && pending.get(activeId);
+      if (loading) {
+        loading.view = renderAssistant(loading.content, loading.reasoning, true);
+        loading.view.article.hidden = !loading.content.trim() && !loading.reasoning.trim();
+        messages.append(loading.view.article);
+      }
       const failure = failures.get(activeId);
       turn.hidden = !awaiting;
       retry.hidden = !awaiting || loading || !ready;
       turnConfig.hidden = !awaiting || loading || ready;
-      status(turnStatus, loading ? '小P 正在回复…' : (
+      status(turnStatus, loading ? '小P 正在思考…' : (
         failure || (awaiting ? '这条消息还没有收到回复。' : '')
       ), Boolean(failure));
       messageInput.disabled = awaiting;
@@ -493,11 +557,12 @@
       activeId = id;
       messageInput.value = '';
       status(composerStatus, '');
+      closeModelMenu();
       if (history.open) history.close();
       renderChat(true);
     }
 
-    async function requestDeepSeek(body, apiKey) {
+    async function requestDeepSeek(body, apiKey, onDelta) {
       let response;
       try {
         response = await fetch(endpoint, {
@@ -510,7 +575,7 @@
           credentials: 'omit',
           cache: 'no-store',
           redirect: 'error',
-          signal: AbortSignal.timeout(100000)
+          signal: AbortSignal.timeout(180000)
         });
       } catch (error) {
         throw new Error(error.name === 'TimeoutError'
@@ -526,17 +591,15 @@
         };
         throw new Error(errors[response.status] || `DeepSeek 请求失败（HTTP ${response.status}）。`);
       }
-      const data = await response.json().catch(() => null);
-      const content = data?.choices?.[0]?.message?.content;
-      if (typeof content !== 'string' || !content.trim()) throw new Error('DeepSeek 未返回文本，请重试。');
-      return content;
+      return DeepSeekStream.read(response, onDelta);
     }
 
     async function requestReply(chat) {
       const profile = selectedProfile();
       const apiKey = apiKeys.get(profile?.id);
       if (!apiKey || pending.has(chat.id)) return;
-      pending.add(chat.id);
+      const stream = { content: '', reasoning: '', view: null, frame: 0 };
+      pending.set(chat.id, stream);
       failures.delete(chat.id);
       renderChat(true);
       try {
@@ -545,14 +608,14 @@
         const recent = chat.messages.slice(-79)
           .filter(entry => entry && ['user', 'assistant'].includes(entry.role) && typeof entry.content === 'string')
           .map(({ role, content }) => ({ role, content: content.slice(0, messageLimit) }));
-        const identity = '默认身份：你是小P，明军的个人助手。';
+        const identity = '默认身份：你是小P，明军的个人助手。日常对话先直接回应问题，使用自然简洁的段落。需要分项时再用短清单，避免装饰性分隔线和重复自我介绍。';
         const instructions = memoryText.trim()
           ? `以下是用户保存的记忆和指令，在本应用内优先于默认身份及后续对话。\n\n${memoryText}\n\n${identity}`
           : identity;
         const body = {
           model: profile.model,
-          thinking: { type: 'disabled' },
-          stream: false,
+          thinking: { type: 'enabled' },
+          stream: true,
           messages: [{ role: 'system', content: instructions }, ...recent]
         };
         while (body.messages.length > 2 && (
@@ -560,18 +623,39 @@
         )) {
           body.messages.splice(1, 1);
         }
-        const content = await requestDeepSeek(body, apiKey);
+        const content = await requestDeepSeek(body, apiKey, ({ content: delta, reasoning }) => {
+          stream.content += delta;
+          stream.reasoning += reasoning;
+          if (stream.frame) return;
+          stream.frame = requestAnimationFrame(() => {
+            stream.frame = 0;
+            if (activeId !== chat.id || !stream.view?.article.isConnected) return;
+            const atLatest = followLatest;
+            stream.view.update(stream.content, stream.reasoning);
+            stream.view.article.hidden = !stream.content.trim() && !stream.reasoning.trim();
+            const progress = stream.content.trim() ? '小P 正在回复…' : '小P 正在思考…';
+            if (turnStatus.textContent !== progress) status(turnStatus, progress);
+            if (atLatest) showLatest();
+            updateScroller();
+          });
+        });
         const chats = readHistory();
         const latestChat = chats.find(item => item.id === chat.id);
         if (latestChat && JSON.stringify(latestChat.messages) === JSON.stringify(chat.messages)) {
           latestChat.messages.push({ role: 'assistant', content });
           saveHistory(latestChat, chats);
+          if (stream.reasoning.trim()) {
+            const thoughts = replyThoughts.get(chat.id) || new Map();
+            thoughts.set(latestChat.messages.length - 1, stream.reasoning);
+            replyThoughts.set(chat.id, thoughts);
+          }
         }
       } catch (error) {
         failures.set(chat.id, error.message);
       } finally {
+        cancelAnimationFrame(stream.frame);
         pending.delete(chat.id);
-        if (activeId === chat.id) renderChat(true);
+        if (activeId === chat.id) renderChat(followLatest);
       }
     }
 
@@ -763,16 +847,46 @@
       if (chat?.messages.at(-1)?.role === 'user') void requestReply(chat);
     });
 
-    modelSelect.addEventListener('change', () => {
+    modelButton.addEventListener('click', () => {
+      if (modelMenu.hidden) openModelMenu();
+      else closeModelMenu(true);
+    });
+    modelButton.addEventListener('keydown', event => {
+      if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+      event.preventDefault();
+      openModelMenu(event.key === 'ArrowDown' ? 1 : -1);
+    });
+    modelMenu.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeModelMenu(true);
+        return;
+      }
+      const next = {
+        ArrowDown: event.target.nextElementSibling || modelMenu.firstElementChild,
+        ArrowUp: event.target.previousElementSibling || modelMenu.lastElementChild,
+        Home: modelMenu.firstElementChild,
+        End: modelMenu.lastElementChild
+      }[event.key];
+      if (!next) return;
+      event.preventDefault();
+      next.focus({ preventScroll: true });
+    });
+    for (const eventName of ['pointerdown', 'focusin']) {
+      document.addEventListener(eventName, event => {
+        if (!modelMenu.hidden && !modelPicker.contains(event.target)) closeModelMenu();
+      });
+    }
+    modelMenu.addEventListener('click', event => {
+      const model = event.target.closest('button')?.dataset.model;
       const profile = selectedProfile();
-      if (!profile || profile.model === modelSelect.value) return;
-      const model = modelSelect.value;
+      closeModelMenu(true);
+      if (!model || !profile || profile.model === model) return;
       try {
         const saved = readProfiles();
         if (!saved.some(item => item.id === profile.id)) throw new Error();
         saveProfiles(saved.map(item => item.id === profile.id ? { ...item, model } : item));
       } catch {
-        modelSelect.value = profile.model;
         status(composerStatus, '模型切换未保存，请检查浏览器存储权限。', true);
         return;
       }
