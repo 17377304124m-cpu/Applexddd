@@ -48,17 +48,16 @@
           fields.className = 'capture-fields';
           [
             ['title', '事项', 'text', 80], ['date', '日期', 'date'],
-            ['time', '时间（选填）', 'text', 10], ['note', '备注 / 原文（最多300字）', 'textarea', 300]
+            ['note', '备注 / 原文（最多300字）', 'textarea', 300]
           ].forEach(function (field) {
             var label = document.createElement('label');
             label.textContent = field[1];
-            if (field[0] === 'title' || field[0] === 'note') label.className = 'capture-wide';
+            if (field[0] === 'note') label.className = 'capture-wide';
             var input = document.createElement(field[2] === 'textarea' ? 'textarea' : 'input');
             if (field[2] !== 'textarea') input.type = field[2];
             else input.rows = 3;
             if (field[3]) input.maxLength = field[3];
             if (field[0] === 'date') { input.min = '1901-01-01'; input.max = '2099-12-31'; }
-            if (field[0] === 'time') input.placeholder = '如：15:00';
             input.dataset.field = field[0];
             input.required = field[0] === 'title' || field[0] === 'date';
             input.value = record[field[0]] || '';
@@ -75,7 +74,7 @@
         var reference = LifeCalendar.getDayInfo(now.getFullYear(), now.getMonth() + 1, now.getDate()).key;
         rows = EventCaptureParser.parse(text, reference);
         renderRows();
-        $('#capture-review-status').textContent = !rows.length ? '未识别出具体日程，可点“添加一条”补充。' : rows.some(function (row) { return !row.date; }) ? '部分内容没有明确日期，请补齐后加入日历。' : '请核对日期、时间和事项。';
+        $('#capture-review-status').textContent = !rows.length ? '未识别出具体日程，可点“添加一条”补充。' : rows.some(function (row) { return !row.date; }) ? '部分内容没有明确日期，请补齐后加入日历。' : '请核对事项和日期。';
         dialog.showModal();
       }
 
@@ -124,7 +123,7 @@
       });
 
       $('#capture-add-row').addEventListener('click', function () {
-        rows = readRows(); rows.push({ title: '', date: '', time: '', note: '' });
+        rows = readRows(); rows.push({ title: '', date: '', note: '' });
         renderRows(); $('#capture-event-rows').lastElementChild.querySelector('input').focus();
       });
       $('#capture-review-form').addEventListener('submit', function (event) {

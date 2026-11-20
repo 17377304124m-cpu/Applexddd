@@ -64,15 +64,13 @@
   }
 
   function init() {
-    ['#page-tools', '#page-info'].forEach(function (selector) {
-      var page = root.document.querySelector(selector);
-      bind(page, function (direction) {
-        var buttons = Array.from(page.querySelectorAll('[data-tool]'));
-        var current = buttons.findIndex(function (button) { return button.classList.contains('active'); });
-        var next = buttons[current + direction];
-        if (next) next.click();
-      }, false);
-    });
+    var page = root.document.querySelector('#page-info');
+    bind(page, function (direction) {
+      var buttons = Array.from(page.querySelectorAll('[data-tool]'));
+      var current = buttons.findIndex(function (button) { return button.classList.contains('active'); });
+      var next = buttons[current + direction];
+      if (next) next.click();
+    }, false);
     bind(root.document.querySelector('#calendar-grid'), function (direction) {
       root.document.querySelector(direction > 0 ? '#calendar-next' : '#calendar-prev').click();
     }, true);

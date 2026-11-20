@@ -2,8 +2,10 @@
   'use strict';
 
   var weekdayNumbers = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 7, '天': 7 };
-  var numberChars = { '零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4,
-    '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+  var numericTime = /(?<![\d:])(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?\d{1,2}:\d{1,2}(?![\d:])/g;
+  var chineseTime = /(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?[零〇一二两三四五六七八九十\d]{1,3}(?:点|时)(?:半|[零〇一二两三四五六七八九十\d]{1,3}分?)?/g;
+  var clockPattern = '(?:' + numericTime.source + '|' + chineseTime.source + ')';
+  var timeRange = new RegExp(clockPattern + '\\s*[至到]\\s*' + clockPattern, 'g');
 
   function pad(number) { return String(number).padStart(2, '0'); }
 
@@ -58,41 +60,12 @@
     return { raw: match[0], key: date ? dateKey(date) : '', inferredYear: inferredYear };
   }
 
-  function chineseNumber(text) {
-    if (/^\d+$/.test(text)) return Number(text);
-    if (text.indexOf('十') !== -1) {
-      var parts = text.split('十');
-      return (parts[0] ? numberChars[parts[0]] : 1) * 10 + (parts[1] ? numberChars[parts[1]] : 0);
-    }
-    return Number(text.split('').map(function (character) { return numberChars[character]; }).join(''));
-  }
-
-  function findTime(text) {
-    var match = text.match(/(?<![\d:])(?:(凌晨|早上|上午|中午|下午|傍晚|晚上|夜里))?(\d{1,2}):(\d{1,2})(?![\d:])/);
-    var hour, minute;
-    if (match) { hour = Number(match[2]); minute = Number(match[3]); }
-    else {
-      match = text.match(/(?:(凌晨|早上|上午|中午|下午|傍晚|晚上|夜里))?([零〇一二两三四五六七八九十\d]{1,3})(?:点|时)(?:(半)|([零〇一二两三四五六七八九十\d]{1,3})(?:分)?)?/);
-      if (!match) return null;
-      hour = chineseNumber(match[2]); minute = match[3] ? 30 : match[4] ? chineseNumber(match[4]) : 0;
-    }
-    var period = match[1] || '';
-    if (/下午|傍晚|晚上|夜里/.test(period) && hour >= 1 && hour < 12) hour += 12;
-    if (period === '中午' && hour >= 1 && hour < 11) hour += 12;
-    if ((period === '凌晨' || period === '夜里' || period === '晚上') && hour === 12) hour = 0;
-    return { raw: match[0], value: pad(hour) + ':' + pad(minute) };
-  }
-
-  function titleFromLine(line, date, time) {
+  function titleFromLine(line, date) {
     if (/^(?:地点|位置|教室|备注|地址|联系人|电话)[:：]/.test(line)) return '';
     var cleaned = date ? line.replace(date.raw, ' ') : line;
-    var nextTime = time;
-    while (nextTime) {
-      cleaned = cleaned.replace(nextTime.raw, ' ');
-      nextTime = findTime(cleaned);
-    }
     cleaned = cleaned.replace(/(?:日程日期|活动日期|会议时间|活动时间|日期|时间)[:：]/g, ' ')
       .replace(/^(?:事项|标题|事件|日程|活动名称|会议主题)[:：]/, '')
+      .replace(timeRange, ' ').replace(numericTime, ' ').replace(chineseTime, ' ')
       .replace(/^\s*(?:[•·-]|\d{1,2}[.、)）])\s*/, '')
       .replace(/^[\s,，、:：;；()（）\-–—~]+|[\s,，、:：;；()（）\-–—~]+$/g, '')
       .replace(/^(?:请于|于|在)(?=\S)/, '').trim();
@@ -101,14 +74,12 @@
   }
 
   function makeRow(lines, reference) {
-    var firstDate = null, firstTime = null, title = '', priority = -1;
+    var firstDate = null, title = '', priority = -1;
     lines.forEach(function (raw) {
       var line = normalize(raw);
       var date = findDate(line, reference);
-      var time = findTime(line);
       if (!firstDate && date) firstDate = date;
-      if (!firstTime && time) firstTime = time;
-      var candidate = titleFromLine(line, date, time);
+      var candidate = titleFromLine(line, date);
       var candidatePriority = /^(?:事项|标题|事件|活动名称|会议主题)[:：]/.test(line) ? 4 : date ? 3 : 2;
       if (candidate && candidatePriority > priority) { title = candidate; priority = candidatePriority; }
     });
@@ -116,7 +87,7 @@
     if (firstDate && firstDate.inferredYear) note.push('年份按参考日期的' + reference.getUTCFullYear() + '年识别。');
     if (firstDate && !firstDate.key) note.push('日期待核对：' + firstDate.raw);
     note.push('原文：' + lines.join('\n'));
-    return { title: title, date: firstDate ? firstDate.key : '', time: firstTime ? firstTime.value : '', note: note.join('\n') };
+    return { title: title, date: firstDate ? firstDate.key : '', note: note.join('\n') };
   }
 
   function parse(text, referenceDateKey) {
@@ -138,10 +109,10 @@
         var line = normalize(raw);
         var date = findDate(line, reference);
         if (date && current.length) {
-          var containsTitle = !!titleFromLine(line, date, findTime(line));
+          var containsTitle = !!titleFromLine(line, date);
           var priorHasTitle = current.some(function (part) {
             var normalized = normalize(part);
-            return !!titleFromLine(normalized, findDate(normalized, reference), findTime(normalized));
+            return !!titleFromLine(normalized, findDate(normalized, reference));
           });
           if (hasDate || (containsTitle && priorHasTitle)) { groups.push(current); current = []; hasDate = false; }
         }
@@ -151,7 +122,7 @@
     });
     if (current.length) groups.push(current);
     return groups.map(function (lines) { return makeRow(lines, reference); })
-      .filter(function (row) { return row.title || row.date || row.time || /日期待核对/.test(row.note); });
+      .filter(function (row) { return row.title || row.date || /日期待核对/.test(row.note); });
   }
 
   function validateRows(rows) {
@@ -162,17 +133,12 @@
       var prefix = '第' + (index + 1) + '条日程：';
       var title = String(row.title || '').trim();
       var date = String(row.date || '').trim();
-      var time = String(row.time || '').trim();
       var note = String(row.note || '').trim();
       if (!title) errors.push(prefix + '请填写事项标题');
       if (title.length > 80) errors.push(prefix + '标题不能超过80字，请核对修改');
       if (!readDateKey(date)) errors.push(prefix + '请填写有效日期');
-      if (time && (!/^\d{2}:\d{2}$/.test(time) || Number(time.slice(0, 2)) > 23 || Number(time.slice(3)) > 59)) {
-        errors.push(prefix + '时间应为有效的24小时制 HH:mm');
-      }
-      var savedNote = time ? '时间：' + time + (note ? '\n' + note : '') : note;
-      if (savedNote.length > 300) errors.push(prefix + '时间与备注合计不能超过300字，请核对修改');
-      events.push({ title: title, date: date, note: savedNote });
+      if (note.length > 300) errors.push(prefix + '备注不能超过300字，请核对修改');
+      events.push({ title: title, date: date, note: note });
     });
     return { events: errors.length ? [] : events, errors: errors };
   }

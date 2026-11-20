@@ -17,18 +17,10 @@
 
   var $ = function (s) { return document.querySelector(s); };
 
-  function svgIcon(paths) {
-    return '<svg viewBox="0 0 24 24">' + paths + '</svg>';
+  function svgIcon(name) {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#mj-icon-' +
+      name + '"></use></svg>';
   }
-  var ICON_LINK = '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>';
-  var ICON_TRASH = '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6z"/><path d="M10 11v6M14 11v6"/>';
-  var ICON_CHECK = '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 5-5"/>';
-  var ICON_CIRCLE = '<circle cx="12" cy="12" r="9"/>';
-  var ICON_COPY = '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>';
-  var ICON_COPIED = '<path d="M20 6 9 17l-5-5"/>';
-  var ICON_EDIT = '<path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z"/><path d="m13.5 7.5 3 3"/>';
-  var ICON_EYE = '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
-  var ICON_EYE_OFF = '<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24M6.1 6.1C3.6 7.7 2 12 2 12s3.5 7 10 7c2 0 3.8-.6 5.3-1.5M10 5.2c.6-.1 1.3-.2 2-.2 6.5 0 10 7 10 7s-.8 1.6-2.2 3.2M2 2l20 20"/>';
 
   function el(tag, className) {
     var node = document.createElement(tag);
@@ -50,12 +42,66 @@
       document.querySelectorAll('.page').forEach(function (p) { p.classList.remove('active'); });
       $('#page-' + tab.dataset.page).classList.add('active');
       if (changingPage) window.scrollTo(0, 0);
-      if (tab.dataset.page === 'tools') {
-        renderTodos();
-        if ($('#tool-schedule').classList.contains('active')) showTodaySchedule();
+      if (tab.dataset.page === 'tools') renderTodos();
+      if (tab.dataset.page === 'info' && $('#tool-schedule').classList.contains('active')) showTodaySchedule();
+      if (tab.dataset.page === 'tools' || tab.dataset.page === 'personal') {
+        var back = $('#page-' + tab.dataset.page + ' [data-subview]:not([hidden]) [data-panel-back]');
+        if (back) back.click();
       }
     });
   });
+
+  function openSubview(page, name) {
+    page.querySelector('[data-section-menu]').hidden = Boolean(name);
+    page.querySelectorAll('[data-subview]').forEach(function (panel) {
+      panel.hidden = panel.dataset.subview !== name;
+      if (!panel.hidden) panel.querySelector('h1').focus({ preventScroll: true });
+    });
+    window.scrollTo(0, 0);
+  }
+
+  document.addEventListener('click', function (event) {
+    var config = event.target.closest('[data-open-config]');
+    if (config && !config.closest('#page-personal')) {
+      $('.tab[data-page="personal"]').click();
+      openSubview($('#page-personal'), 'config');
+      return;
+    }
+    var open = event.target.closest('[data-open-panel]');
+    if (open) {
+      openSubview(open.closest('.menu-page'), open.dataset.openPanel);
+      return;
+    }
+    var back = event.target.closest('[data-panel-back]');
+    if (back) {
+      var panel = back.closest('[data-subview]');
+      var page = panel.closest('.menu-page');
+      openSubview(page, '');
+      page.querySelector('[data-open-panel="' + panel.dataset.subview + '"]').focus({ preventScroll: true });
+    }
+  });
+
+  var theme = store.get('theme', 'light') === 'dark' ? 'dark' : 'light';
+
+  function renderTheme() {
+    document.documentElement.dataset.theme = theme;
+    $('meta[name="theme-color"]').content = theme === 'dark' ? '#111111' : '#f7f7f7';
+    $('[name="mingjun-theme"][value="' + theme + '"]').checked = true;
+    $('#theme-current').textContent = theme === 'dark' ? '黑色' : '白色';
+  }
+
+  document.querySelectorAll('[name="mingjun-theme"]').forEach(function (option) {
+    option.addEventListener('change', function () {
+      if (store.set('theme', option.value)) {
+        theme = option.value;
+        $('#theme-feedback').textContent = '';
+      } else {
+        $('#theme-feedback').textContent = '主题保存失败，请检查浏览器存储权限。';
+      }
+      renderTheme();
+    });
+  });
+  renderTheme();
 
   /* ================= 个人资料 ================= */
   var profile = store.get('profile', {
@@ -71,9 +117,7 @@
   function renderProfile() {
     nameEl.textContent = profile.name;
     taglineEl.textContent = profile.tagline;
-    $('#home-profile-name').textContent = profile.name;
-    $('#home-profile-tagline').textContent = profile.tagline;
-    document.title = profile.name + '的生活助理';
+    $('#menu-profile-name').textContent = profile.name;
   }
 
   editBtn.addEventListener('click', function () {
@@ -100,10 +144,6 @@
     }
   });
 
-  $('#profile-open-btn').addEventListener('click', function () {
-    document.querySelector('[data-page="personal"]').click();
-  });
-
   /* ================= 生活日历 ================= */
   var calendarNow = new Date();
   var calendarYear = calendarNow.getFullYear();
@@ -111,7 +151,6 @@
   var calendarSelected = calendarNow.getDate();
   var birthdays = store.get('birthdays', []);
   var personalEvents = store.get('personalEvents', []);
-  var recordKind = 'birthday';
   var weekdays = '日一二三四五六';
 
   function renderCalendar() {
@@ -122,6 +161,7 @@
     $('#home-date-label').textContent = (today.getMonth() + 1) + '月 · 周' + weekdays[today.getDay()];
     var selected = LifeCalendar.getDayInfo(calendarYear, calendarMonth, calendarSelected);
     var selectedEntries = LifeCalendar.getPersonalEntries(selected.key, birthdays, personalEvents);
+    var selectedFestivals = LifeCalendar.getFestivalDetails(selected);
     $('#calendar-month').textContent = calendarYear + ' 年 ' + calendarMonth + ' 月';
     var grid = $('#calendar-grid');
     grid.setAttribute('aria-label', calendarYear + '年' + calendarMonth + '月日期');
@@ -175,13 +215,33 @@
     if (selected.key === todayKey) heading.textContent += ' · 今天';
     var lunar = el('p', 'calendar-lunar');
     lunar.textContent = '农历 ' + selected.lunar;
-    var events = el('p', 'calendar-events');
-    events.textContent = selected.events.length ? selected.events.join(' · ') : '暂无安排';
     var detailHeading = el('div', 'calendar-detail-heading');
     detailHeading.appendChild(heading);
     detailHeading.appendChild(lunar);
     detail.appendChild(detailHeading);
-    if (selected.events.length || !selectedEntries.length) detail.appendChild(events);
+    if (selected.holiday || selected.workday) {
+      var status = el('p', 'calendar-status');
+      status.textContent = selected.holiday ? selected.holiday + '假期 · 休息日' : '调休补班 · 工作日';
+      detail.appendChild(status);
+    }
+    if (selectedFestivals.length) {
+      var festivalList = el('ul', 'calendar-festivals');
+      selectedFestivals.forEach(function (festival) {
+        var item = el('li');
+        var name = el('h3');
+        name.textContent = festival.name;
+        var description = el('p');
+        description.textContent = festival.description;
+        item.appendChild(name);
+        item.appendChild(description);
+        festivalList.appendChild(item);
+      });
+      detail.appendChild(festivalList);
+    } else if (!selectedEntries.length) {
+      var emptyNotice = el('p', 'calendar-events');
+      emptyNotice.textContent = '暂无安排';
+      detail.appendChild(emptyNotice);
+    }
     if (selectedEntries.length) {
       var dayList = el('ul', 'day-events');
       selectedEntries.forEach(function (entry) {
@@ -197,11 +257,6 @@
         dayList.appendChild(item);
       });
       detail.appendChild(dayList);
-    }
-    if (selected.holiday || selected.workday) {
-      var status = el('p', 'calendar-status');
-      status.textContent = selected.holiday ? selected.holiday + '假期 · 休息日' : '调休补班 · 工作日';
-      detail.appendChild(status);
     }
   }
 
@@ -248,7 +303,6 @@
     calendarYear = parts[0];
     calendarMonth = parts[1];
     calendarSelected = parts[2];
-    $('#life-dialog').close();
     renderCalendar();
     $('#calendar-grid').querySelector('[data-date="' + key + '"]').focus({ preventScroll: true });
     $('.calendar-section').scrollIntoView({
@@ -256,95 +310,38 @@
     });
   }
 
-  function renderPersonalRecords() {
-    var today = new Date();
-    var todayKey = LifeCalendar.getDayInfo(today.getFullYear(), today.getMonth() + 1, today.getDate()).key;
-    var query = $('#life-search').value.trim().toLocaleLowerCase();
-    var records = (recordKind === 'birthday' ? birthdays : personalEvents).map(function (record) {
-      var next = recordKind === 'birthday' ? LifeCalendar.nextBirthday(record, todayKey) : null;
-      var label = recordKind === 'birthday' ? LifeCalendar.birthdayLabel(record) : record.date;
-      return { record: record, date: next ? next.key : record.date, label: label };
-    }).filter(function (item) {
-      return [item.record.name, item.record.title, item.record.note, item.label, item.date].join(' ').toLocaleLowerCase().indexOf(query) !== -1;
-    }).sort(function (a, b) { return a.date.localeCompare(b.date); });
-    var list = $('#life-record-list');
-    list.innerHTML = '';
-    if (!records.length) {
-      var empty = el('li', 'life-hint');
-      empty.textContent = query ? '没有找到匹配的记录' : recordKind === 'birthday' ? '还没有好友生日，先添加一位吧。' : '还没有事件，先记下一件重要的事。';
-      list.appendChild(empty);
-    }
-    records.forEach(function (item) {
-      var record = item.record;
-      var row = el('li', 'life-record');
-      var heading = el('h3');
-      heading.textContent = record.name || record.title;
-      var meta = el('p');
-      meta.textContent = recordKind === 'birthday' ? item.label + '\n下次生日：' + item.date + (item.date === todayKey ? ' · 就是今天' : '') : '日期：' + item.date;
-      row.appendChild(heading);
-      row.appendChild(meta);
-      if (record.note) {
-        var note = el('p');
-        note.textContent = record.note;
-        row.appendChild(note);
-      }
-      var actions = el('div', 'life-record-actions');
-      var jump = el('button', 'btn');
-      jump.textContent = '查看日期';
-      jump.addEventListener('click', function () { jumpToCalendar(item.date); });
-      var remove = el('button', 'btn delete-record');
-      remove.textContent = '删除';
-      remove.setAttribute('aria-label', '删除' + (record.name || record.title));
-      remove.addEventListener('click', function () {
-        if (!confirm('确定删除“' + (record.name || record.title) + '”这条记录吗？')) return;
-        var key = recordKind === 'birthday' ? 'birthdays' : 'personalEvents';
-        var next = (recordKind === 'birthday' ? birthdays : personalEvents).filter(function (entry) { return entry.id !== record.id; });
-        if (!savePersonalRecords(key, next)) return;
-        if (recordKind === 'birthday') birthdays = next;
-        else personalEvents = next;
-        $('#life-feedback').textContent = '已删除记录';
-        renderPersonalRecords();
-        renderCalendar();
-      });
-      actions.appendChild(jump);
-      actions.appendChild(remove);
-      row.appendChild(actions);
-      list.appendChild(row);
-    });
-  }
+  var lifeEntryDialog = $('#life-entry-dialog');
+  var lifeEntryFeedback = $('#life-entry-feedback');
 
   function savePersonalRecords(key, records) {
     try {
       localStorage.setItem(key, JSON.stringify(records));
       return true;
     } catch (error) {
-      $('#life-feedback').textContent = '保存失败，请检查浏览器是否允许本地存储后重试。';
+      lifeEntryFeedback.textContent = '保存失败，请检查浏览器是否允许本地存储后重试。';
       return false;
     }
   }
 
-  function openPersonalRecords(kind) {
-    recordKind = kind;
-    $('#life-dialog-title').textContent = kind === 'birthday' ? '好友生日' : '事件';
-    $('#birthday-form').hidden = kind !== 'birthday';
-    $('#event-form').hidden = kind !== 'event';
-    $('#life-search').value = '';
-    $('#life-feedback').textContent = '';
-    $('#event-date').value = LifeCalendar.getDayInfo(calendarYear, calendarMonth, calendarSelected).key;
-    renderPersonalRecords();
-    $('#life-dialog').showModal();
-    $(kind === 'birthday' ? '#birthday-name' : '#event-title').focus();
+  function openPersonalEntry(kind) {
+    var isBirthday = kind === 'birthday';
+    $('#life-entry-title').textContent = isBirthday ? '添加好友生日' : '添加事件';
+    $('#birthday-form').hidden = !isBirthday;
+    $('#event-form').hidden = isBirthday;
+    if (!isBirthday) $('#event-date').value = LifeCalendar.getDayInfo(calendarYear, calendarMonth, calendarSelected).key;
+    lifeEntryFeedback.textContent = '';
+    lifeEntryDialog.showModal();
+    $(isBirthday ? '#birthday-name' : '#event-title').focus();
   }
 
-  $('#birthday-open').addEventListener('click', function () { openPersonalRecords('birthday'); });
-  $('#event-open').addEventListener('click', function () { openPersonalRecords('event'); });
-  $('#life-close').addEventListener('click', function () { $('#life-dialog').close(); });
-  $('#life-search').addEventListener('input', renderPersonalRecords);
+  $('#birthday-open').addEventListener('click', function () { openPersonalEntry('birthday'); });
+  $('#event-open').addEventListener('click', function () { openPersonalEntry('event'); });
+  $('#life-entry-close').addEventListener('click', function () { lifeEntryDialog.close(); });
 
   $('#birthday-form').addEventListener('submit', function (event) {
     event.preventDefault();
     var name = $('#birthday-name').value.trim();
-    if (!name) { $('#life-feedback').textContent = '请填写好友姓名'; return; }
+    if (!name) { lifeEntryFeedback.textContent = '请填写好友姓名'; return; }
     var record = {
       id: crypto.randomUUID(), name: name,
       month: Number($('#birthday-month').value), day: Number($('#birthday-day').value),
@@ -354,25 +351,21 @@
     if (!savePersonalRecords('birthdays', next)) return;
     birthdays = next;
     event.target.reset();
-    $('#life-search').value = '';
-    $('#life-feedback').textContent = '已保存“' + name + '”的农历生日';
-    renderPersonalRecords();
+    lifeEntryFeedback.textContent = '已保存“' + name + '”的农历生日';
     renderCalendar();
   });
 
   $('#event-form').addEventListener('submit', function (event) {
     event.preventDefault();
     var title = $('#event-title').value.trim();
-    if (!title) { $('#life-feedback').textContent = '请填写事件名称'; return; }
+    if (!title) { lifeEntryFeedback.textContent = '请填写事件名称'; return; }
     var record = { id: crypto.randomUUID(), title: title, date: $('#event-date').value, note: $('#event-note').value.trim() };
     var next = personalEvents.concat([record]);
     if (!savePersonalRecords('personalEvents', next)) return;
     personalEvents = next;
     event.target.reset();
     $('#event-date').value = record.date;
-    $('#life-search').value = '';
-    $('#life-feedback').textContent = '已保存“' + title + '”';
-    renderPersonalRecords();
+    lifeEntryFeedback.textContent = '已保存“' + title + '”';
     renderCalendar();
   });
 
@@ -394,9 +387,9 @@
       var li = el('li', 'link-item');
       li.dataset.linkIndex = i;
       var icon = el('span', 'link-icon');
-      icon.innerHTML = svgIcon(ICON_LINK);
+      icon.innerHTML = svgIcon('link');
       var a = el('a');
-      a.href = link.url;
+      if (DataBackup.isLinkUrl(link.url)) a.href = link.url;
       a.draggable = false;
       a.target = '_blank';
       a.rel = 'noopener';
@@ -408,12 +401,12 @@
       var copy = el('button', 'icon-btn link-copy copy-btn');
       copy.title = '复制网址';
       copy.setAttribute('aria-label', '复制网址');
-      copy.innerHTML = svgIcon(ICON_COPY);
+      copy.innerHTML = svgIcon('copy');
       copy.addEventListener('click', function () { copyText(link.url, copy); });
       var del = el('button', 'icon-btn link-del');
       del.title = '删除链接';
       del.setAttribute('aria-label', '删除链接');
-      del.innerHTML = svgIcon(ICON_TRASH);
+      del.innerHTML = svgIcon('trash');
       del.addEventListener('click', function () {
         links.splice(i, 1);
         store.set('links', links);
@@ -433,6 +426,7 @@
     var title = $('#link-title').value.trim();
     var url = $('#link-url').value.trim();
     if (!title || !url) { $('#link-form-feedback').textContent = '请填写名称和网址。'; return; }
+    if (!DataBackup.isLinkUrl(url)) { $('#link-form-feedback').textContent = '请填写受支持的网址。'; return; }
     var next = links.concat([{ title: title, url: url }]);
     if (!store.set('links', next)) { $('#link-form-feedback').textContent = '保存失败，请检查浏览器本地存储权限后重试。'; return; }
     links = next;
@@ -462,7 +456,7 @@
     }
   });
 
-  /* ================= 工具分段切换 ================= */
+  /* ================= 信息分段切换 ================= */
   var segments = document.querySelectorAll('.segmented .segment[data-tool]');
   segments.forEach(function (seg) {
     seg.addEventListener('click', function () {
@@ -471,7 +465,6 @@
       page.querySelectorAll('.tool-panel').forEach(function (p) { p.classList.remove('active'); });
       $('#tool-' + seg.dataset.tool).classList.add('active');
       if (seg.dataset.tool === 'schedule') showTodaySchedule();
-      if (seg.dataset.tool === 'todo') renderTodos();
     });
   });
 
@@ -542,7 +535,7 @@
       check.title = todo.done ? '标记未完成' : '标记完成';
       check.setAttribute('aria-label', check.title);
       check.setAttribute('aria-pressed', String(todo.done));
-      check.innerHTML = svgIcon(todo.done ? ICON_CHECK : ICON_CIRCLE);
+      check.innerHTML = svgIcon(todo.done ? 'done' : 'pending');
       check.addEventListener('click', function () {
         saveTodos(TodoManager.toggle(todos, todos.indexOf(todo), new Date().toISOString()));
       });
@@ -551,7 +544,7 @@
       var del = el('button', 'icon-btn danger');
       del.title = '删除待办';
       del.setAttribute('aria-label', '删除待办');
-      del.innerHTML = svgIcon(ICON_TRASH);
+      del.innerHTML = svgIcon('trash');
       del.addEventListener('click', function () {
         var next = todos.slice();
         next.splice(todos.indexOf(todo), 1);
@@ -784,11 +777,11 @@
 
   function copyText(text, btn) {
     function done() {
-      btn.innerHTML = svgIcon(ICON_COPIED);
+      btn.innerHTML = svgIcon('check');
       btn.classList.add('copied');
       $('#info-feedback').textContent = btn.title.replace(/^复制/, '') + '已复制。';
       setTimeout(function () {
-        btn.innerHTML = svgIcon(ICON_COPY);
+        btn.innerHTML = svgIcon('copy');
         btn.classList.remove('copied');
       }, 1200);
     }
@@ -822,16 +815,19 @@
     accounts.forEach(function (acc, i) {
       var li = el('li', 'item account-item');
       var wrap = el('div', 'item-text');
-      var site = el('div');
+      var site = el('div', 'account-site');
       site.textContent = acc.site;
-      site.style.fontWeight = '600';
-      var user = el('div', 'account-line account-user');
+      var user = el('span', 'account-user');
       user.textContent = acc.user;
-      var pass = el('div', 'account-line account-pass');
+      var userLine = el('div', 'account-line');
+      userLine.append('账号：', user);
+      var pass = el('span', 'account-pass');
       pass.textContent = '••••••';
+      var passLine = el('div', 'account-line');
+      passLine.append('密码：', pass);
       wrap.appendChild(site);
-      wrap.appendChild(user);
-      wrap.appendChild(pass);
+      wrap.appendChild(userLine);
+      wrap.appendChild(passLine);
 
       var copyCode = null;
       if (acc.secret) {
@@ -864,13 +860,13 @@
       var copyUser = el('button', 'icon-btn copy-btn copy-user');
       copyUser.title = '复制账号';
       copyUser.setAttribute('aria-label', '复制账号');
-      copyUser.innerHTML = svgIcon(ICON_COPY);
+      copyUser.innerHTML = svgIcon('copy');
       copyUser.addEventListener('click', function () { copyText(acc.user, copyUser); });
 
       var copyPass = el('button', 'icon-btn copy-btn copy-pass');
       copyPass.title = '复制密码';
       copyPass.setAttribute('aria-label', '复制密码');
-      copyPass.innerHTML = svgIcon(ICON_COPY);
+      copyPass.innerHTML = svgIcon('copy');
       copyPass.addEventListener('click', function () { copyText(acc.pass, copyPass); });
 
       if (copyCode) {
@@ -878,7 +874,7 @@
         var cc = el('button', 'icon-btn copy-btn totp-copy');
         cc.title = '复制验证码';
         cc.setAttribute('aria-label', '复制验证码');
-        cc.innerHTML = svgIcon(ICON_COPY);
+        cc.innerHTML = svgIcon('copy');
         cc.addEventListener('click', function () {
           var step = Math.floor(Date.now() / 1000 / 30);
           totpCode(secretBytesForCopy, step).then(function (code) { copyText(code, cc); });
@@ -890,23 +886,23 @@
       var eye = el('button', 'icon-btn');
       eye.title = '显示 / 隐藏密码';
       eye.setAttribute('aria-label', '显示或隐藏密码');
-      eye.innerHTML = svgIcon(ICON_EYE);
+      eye.innerHTML = svgIcon('eye');
       eye.addEventListener('click', function () {
         visible = !visible;
         pass.textContent = visible ? acc.pass : '••••••';
-        eye.innerHTML = svgIcon(visible ? ICON_EYE_OFF : ICON_EYE);
+        eye.innerHTML = svgIcon(visible ? 'eye-off' : 'eye');
       });
 
       var edit = el('button', 'icon-btn account-edit');
       edit.title = '修改账号';
       edit.setAttribute('aria-label', '修改账号');
-      edit.innerHTML = svgIcon(ICON_EDIT);
+      edit.innerHTML = svgIcon('edit');
       edit.addEventListener('click', function () { openAccountDialog(i); });
 
       var del = el('button', 'icon-btn danger');
       del.title = '删除账号';
       del.setAttribute('aria-label', '删除账号');
-      del.innerHTML = svgIcon(ICON_TRASH);
+      del.innerHTML = svgIcon('trash');
       del.addEventListener('click', function () {
         accounts.splice(i, 1);
         store.set('accounts', accounts);
@@ -996,7 +992,9 @@
       return {
         profile: profile, links: links, todos: todos, scheduleWeek: scheduleWeek,
         accounts: accounts, birthdays: birthdays, personalEvents: personalEvents,
-        importedSchedule: { version: 1, courses: COURSES }
+        importedSchedule: { version: 1, courses: COURSES },
+        library: store.get('library', []), memory: store.get('memory', ''),
+        chatHistory: store.get('chatHistory', []), theme: theme
       };
     }
   });
@@ -1010,7 +1008,7 @@
       personalEvents = next;
       renderCalendar();
     },
-    reveal: function (date) { jumpToCalendar(date); }
+    reveal: jumpToCalendar
   });
   MobileSwipes.init();
   FixedViewport.init();

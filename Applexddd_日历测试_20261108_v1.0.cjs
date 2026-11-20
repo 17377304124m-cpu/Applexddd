@@ -60,6 +60,32 @@ test('特色日期与清明节可查看', () => {
   assert.ok(calendar.getDayInfo(2026, 11, 8).events.includes('记者节'));
 });
 
+test('节日简介包含节日名称和非空说明', () => {
+  assert.equal(typeof calendar.getFestivalDetails, 'function');
+  const details = calendar.getFestivalDetails(calendar.getDayInfo(2026, 1, 1));
+  assert.deepEqual(details.map(detail => detail.name), ['元旦']);
+  assert.equal(typeof details[0].description, 'string');
+  assert.ok(details[0].description.trim());
+});
+
+test('春节当天和假期延续日均可查看春节简介', () => {
+  const festival = calendar.getFestivalDetails(calendar.getDayInfo(2026, 2, 17));
+  const holiday = calendar.getFestivalDetails(calendar.getDayInfo(2026, 2, 18));
+  assert.deepEqual(festival.map(detail => detail.name), ['春节']);
+  assert.deepEqual(holiday, festival);
+});
+
+test('同日遇到不同节日时按节日、假期的顺序显示', () => {
+  const details = calendar.getFestivalDetails(calendar.getDayInfo(2026, 2, 16));
+  assert.deepEqual(details.map(detail => detail.name), ['除夕', '春节']);
+  assert.ok(details.every(detail => detail.description.trim()));
+});
+
+test('普通日和只有补班标记的日期不显示节日简介', () => {
+  assert.deepEqual(calendar.getFestivalDetails(calendar.getDayInfo(2026, 1, 6)), []);
+  assert.deepEqual(calendar.getFestivalDetails(calendar.getDayInfo(2026, 1, 4)), []);
+});
+
 test('生日按农历逐年换算，腊月可落在次年公历', () => {
   assert.equal(typeof calendar.birthdayInLunarYear, 'function', '尚未实现农历生日');
   assert.equal(calendar.birthdayInLunarYear({month:1, day:1, leap:false}, 2027).key, '2027-02-06');

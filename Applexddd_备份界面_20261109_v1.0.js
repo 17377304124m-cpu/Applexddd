@@ -24,7 +24,7 @@
         var day = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('');
         anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = 'Applexddd_数据备份_' + day + '_v1.0.json';
+        anchor.download = 'Applexddd_数据备份_' + day + '_v' + backup.version + '.0.json';
         document.body.appendChild(anchor);
         anchor.click();
         feedback.textContent = '备份文件已生成，请保存到“文件”或其他安全位置。';
@@ -65,7 +65,7 @@
         var data = pending.data;
         var counts = document.createElement('dl');
         counts.className = 'backup-counts';
-        [
+        var rows = [
           ['个人资料', '1份'],
           ['好友生日', data.birthdays.length + '位'],
           ['日历事件', data.personalEvents.length + '条'],
@@ -73,7 +73,16 @@
           ['课表', data.importedSchedule ? data.importedSchedule.courses.length + '条课程' : '默认课表'],
           ['账号', data.accounts.length + '个'],
           ['常用链接', data.links.length + '个']
-        ].forEach(function (item) {
+        ];
+        if (pending.version === 2) {
+          rows.push(
+            ['资料库', data.library.length + '条'],
+            ['记忆', data.memory.length + '字'],
+            ['聊天记录', data.chatHistory.length + '个对话'],
+            ['主题', data.theme === 'dark' ? '深色' : '浅色']
+          );
+        }
+        rows.forEach(function (item) {
           var row = document.createElement('div');
           var label = document.createElement('dt');
           var value = document.createElement('dd');
@@ -83,6 +92,9 @@
           counts.appendChild(row);
         });
         summary.appendChild(counts);
+        document.getElementById('backup-replace-hint').textContent = pending.version === 1
+          ? '这是旧版备份。确认后将替换上方列出的数据，保留本机的资料库、记忆、聊天记录和主题。'
+          : '确认后将替换上方列出的本机数据。可先导出当前数据留存。';
         confirmButton.disabled = false;
         dialog.showModal();
         document.getElementById('backup-cancel').focus();

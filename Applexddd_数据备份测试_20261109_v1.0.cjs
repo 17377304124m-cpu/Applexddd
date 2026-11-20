@@ -6,7 +6,7 @@ const modulePath = path.join(__dirname, 'Applexddd_数据备份_20261109_v1.0.js
 const backup = fs.existsSync(modulePath) ? require(modulePath) : null;
 const exportedAt = '2026-11-09T07:08:09.000Z';
 
-function data() {
+function legacyData() {
   return {
     profile: { name: '迁移示例', tagline: '', bio: '保留旧资料' },
     links: [{ title: '乙', url: 'https://example.org/b' }, { title: '甲', url: 'https://example.com/a' }],
@@ -17,6 +17,10 @@ function data() {
     personalEvents: [{ id: 'event-1', title: '会议', date: '2028-02-29', note: '时间：16:00\n保留原文' }],
     importedSchedule: { version: 1, courses: [{ name: '课程', teacher: '', day: 7, periods: [1, 3], weeks: [10, 12, 14], room: 'B412', roomWeek10: 'A-306', color: 'teal' }] }
   };
+}
+
+function data() {
+  return { ...legacyData(), library: [], memory: '', chatHistory: [], theme: 'light' };
 }
 
 test('待办完成时间随备份往返和恢复保留，旧待办仍兼容', () => {
@@ -38,7 +42,7 @@ test('拒绝非法待办完成时间，不破坏归档时间计算', () => {
 });
 
 function envelope(changes = {}) {
-  return { format: 'Applexddd.backup', version: 1, exportedAt, data: data(), ...changes };
+  return { format: 'Applexddd.backup', version: 1, exportedAt, data: legacyData(), ...changes };
 }
 
 function api() {
@@ -60,7 +64,7 @@ test('完整往返保存全部类别、链接顺序、农历生日、课表特�
   const source = data();
   const created = api().create(source, exportedAt);
   const actual = api().parse(JSON.stringify(created));
-  assert.deepEqual(actual, envelope());
+  assert.deepEqual(actual, envelope({ version: 2, data: source }));
   actual.data.profile.name = '改过的副本';
   created.data.profile.name = '改过的导出内容';
   assert.equal(source.profile.name, '迁移示例');
@@ -85,7 +89,7 @@ test('普通网址、FTP、邮件及电话链接可以原样往返', () => {
 
 test('执行脚本、未知协议、缺少目标和伪装的恶意链接均拒绝', () => {
   for (const url of ['javascript:alert(1)', ' \nJaVaScRiPt:alert(1)', 'java\nscript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'vbscript:msgbox(1)', 'file:///tmp/a', 'https://', 'mailto:', 'tel:', 'javascript&#58;alert(1)', '%6aavascript:alert(1)', '//example.com']) {
-    const source = data(); source.links[0].url = url;
+    const source = legacyData(); source.links[0].url = url;
     assert.throws(() => api().parse(JSON.stringify(envelope({ data: source }))), /链接|网址/);
   }
 });
@@ -93,8 +97,8 @@ test('执行脚本、未知协议、缺少目标和伪装的恶意链接均拒�
 test('损坏文件、其他应用文件、不支持版本和缺少数据类别均拒绝', () => {
   assert.throws(() => api().parse('{'), /备份/);
   assert.throws(() => api().parse(JSON.stringify(envelope({ format: 'other' }))), /备份/);
-  assert.throws(() => api().parse(JSON.stringify(envelope({ version: 2 }))), /版本/);
-  const source = data(); delete source.accounts;
+  assert.throws(() => api().parse(JSON.stringify(envelope({ version: 3 }))), /版本/);
+  const source = legacyData(); delete source.accounts;
   assert.throws(() => api().parse(JSON.stringify(envelope({ data: source }))), /数据|账号/);
 });
 
@@ -153,10 +157,74 @@ test('备份时间不能是无效日期，验证和预览不会写入存储', ()
 });
 
 test('导入只替换明确的数据键，旧备份类别不与本机记录混合', () => {
-  const store = memoryStorage({ accounts: '[{"site":"旧账号"}]', unrelated: '旁边应用的值' });
+  const newValues = { library: '[{"id":"from-new-version"}]', memory: '"已有记忆"', chatHistory: '[{"id":"history"}]', theme: '"dark"' };
+  const store = memoryStorage({ ...newValues, accounts: '[{"site":"旧账号"}]', unrelated: '旁边应用的值' });
   api().restore(store, envelope());
-  for (const key of Object.keys(data())) assert.deepEqual(JSON.parse(store.getItem(key)), data()[key]);
+  for (const [key, value] of Object.entries(legacyData())) assert.deepEqual(JSON.parse(store.getItem(key)), value);
+  for (const [key, value] of Object.entries(newValues)) assert.equal(store.getItem(key), value);
   assert.equal(store.getItem('unrelated'), '旁边应用的值');
+});
+
+test('新版备份完整恢复资料库、记忆、聊天和主题', () => {
+  const source = data();
+  source.library = [
+    { id: 'note-1', title: '备忘资料', note: '第一行\n第二行', url: '' },
+    { id: 'note-2', title: '示例网站', note: '', url: 'https://example.com/资料' }
+  ];
+  source.memory = '常用日期格式 YYYY-MM-DD';
+  source.chatHistory = [{ id: 'chat-1', title: '示例对话', updatedAt: exportedAt, messages: [
+    { role: 'user', content: '你好' },
+    { role: 'assistant', content: '需要我帮忙吗？' }
+  ] }];
+  source.theme = 'dark';
+  const parsed = api().parse(JSON.stringify(api().create(source, exportedAt)));
+  assert.equal(parsed.version, 2);
+  const store = memoryStorage({ library: '[{"id":"old"}]', mingjunApiKey: 'test-key' });
+  api().restore(store, parsed);
+  for (const [key, value] of Object.entries(source)) assert.deepEqual(JSON.parse(store.getItem(key)), value);
+  assert.equal(store.getItem('mingjunApiKey'), 'test-key');
+});
+
+test('新版备份不导出记录中未经授权的字段', () => {
+  const source = data();
+  source.library = [{ id: 'note-1', title: '示例', note: '', url: '', apiKey: 'test-key' }];
+  source.chatHistory = [{ id: 'chat-1', title: '示例对话', updatedAt: exportedAt, messages: [{ role: 'user', content: '你好', apiKey: 'test-key' }] }];
+  source.accounts[0].apiKey = 'test-key';
+  assert.doesNotMatch(JSON.stringify(api().create(source, exportedAt)), /test-key/);
+});
+
+test('新版备份拒绝不完整的数据类别和超出约定的值', () => {
+  const record = { id: 'note-1', title: '示例', note: '备注', url: '' };
+  const chat = { id: 'chat-1', title: '示例对话', updatedAt: exportedAt, messages: [{ role: 'user', content: '你好' }] };
+  for (const [change, expectedError] of [
+    [{ library: [{ ...record, url: 'javascript:alert(1)' }] }, /资料库/],
+    [{ library: [{ ...record, url: 'ftp://example.com' }] }, /资料库/],
+    [{ library: [{ ...record, title: '' }] }, /资料库/],
+    [{ library: [record, { ...record }] }, /资料库/],
+    [{ memory: '字'.repeat(20001) }, /记忆/],
+    [{ chatHistory: [{ ...chat, updatedAt: '2026-02-30T07:08:09.000Z' }] }, /聊天/],
+    [{ chatHistory: [{ ...chat, messages: [{ role: 'system', content: 'invalid' }] }] }, /聊天/],
+    [{ chatHistory: [chat, { ...chat }] }, /聊天/],
+    [{ theme: 'automatic' }, /主题/],
+    [{ mingjunApiKey: 'test-key' }, /数据/]
+  ]) {
+    const source = { ...data(), ...change };
+    assert.throws(() => api().create(source, exportedAt), expectedError);
+    assert.throws(() => api().parse(JSON.stringify(envelope({ version: 2, data: source }))), expectedError);
+  }
+  assert.throws(() => api().parse(JSON.stringify(envelope({ version: 2 }))), /数据/);
+});
+
+test('新版恢复在新增字段保存失败时一并回滚旧数据和新数据', () => {
+  const store = memoryStorage({ profile: ' { "old" : "profile" } ', library: '[ ]', memory: '"旧记忆"' });
+  const before = store.snapshot();
+  const originalSet = store.setItem;
+  store.setItem = function (key, value) {
+    if (key === 'theme') throw Error('quota');
+    originalSet(key, value);
+  };
+  assert.throws(() => api().restore(store, envelope({ version: 2, data: data() })), /保存失败/);
+  assert.deepEqual(store.snapshot(), before);
 });
 
 test('中途保存失败时回滚已修改键，旧原始字符串及未知键均保持', () => {
@@ -169,7 +237,7 @@ test('中途保存失败时回滚已修改键，旧原始字符串及未知键�
 
 test('存储读取被拒或导入验证失败时不产生部分写入', () => {
   const store = memoryStorage({ profile: '{"old":true}', unrelated: '保留' }); const before = store.snapshot();
-  const invalid = envelope({ version: 2 });
+  const invalid = envelope({ version: 3 });
   assert.throws(() => api().restore(store, invalid), /版本/);
   assert.deepEqual(store.snapshot(), before);
   store.getItem = function () { throw Error('blocked'); };

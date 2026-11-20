@@ -1,7 +1,8 @@
 (function (root) {
   'use strict';
 
-  var keys = ['profile', 'links', 'todos', 'scheduleWeek', 'accounts', 'birthdays', 'personalEvents', 'importedSchedule'];
+  var legacyKeys = ['profile', 'links', 'todos', 'scheduleWeek', 'accounts', 'birthdays', 'personalEvents', 'importedSchedule'];
+  var currentKeys = legacyKeys.concat(['library', 'memory', 'chatHistory', 'theme']);
 
   function check(condition, label) {
     if (!condition) throw new Error(label + '格式不正确，请选择完整的生活助理备份文件。');
@@ -44,6 +45,10 @@
     } catch (error) { return false; }
   }
 
+  function isLibraryUrl(value) {
+    return typeof value === 'string' && /^https?:\/\//i.test(value) && validUrl(value);
+  }
+
   function items(value, label, validate) {
     check(Array.isArray(value), label);
     Array.from(value).forEach(function (item) {
@@ -66,7 +71,7 @@
     });
   }
 
-  function validateData(data) {
+  function validateLegacyData(data, keys) {
     check(object(data) && keys.every(function (key) { return Object.prototype.hasOwnProperty.call(data, key); }) &&
       Object.keys(data).every(function (key) { return keys.indexOf(key) !== -1; }), '备份数据');
     check(object(data.profile) && text(data.profile.name, true) && text(data.profile.tagline) &&
@@ -106,18 +111,75 @@
           (course.roomWeek10 === undefined || text(course.roomWeek10)), '课表');
       });
     }
-    return JSON.parse(JSON.stringify(data));
+  }
+
+  function validateCurrentData(data) {
+    items(data.library, '资料库', function (entry) {
+      check(text(entry.title, true) && text(entry.note) && (entry.url === '' || isLibraryUrl(entry.url)), '资料库记录');
+    });
+    recordIds(data.library, '资料库记录ID');
+    check(text(data.memory) && data.memory.length <= 20000, '记忆');
+    items(data.chatHistory, '聊天记录', function (chat) {
+      check(text(chat.title, true) && validTimestamp(chat.updatedAt), '聊天记录');
+      items(chat.messages, '聊天消息', function (message) {
+        check((message.role === 'user' || message.role === 'assistant') && text(message.content), '聊天消息');
+      });
+    });
+    recordIds(data.chatHistory, '聊天记录ID');
+    check(data.theme === 'light' || data.theme === 'dark', '主题');
+  }
+
+  function pick(record, fields) {
+    var result = {};
+    fields.forEach(function (field) {
+      if (Object.prototype.hasOwnProperty.call(record, field)) result[field] = record[field];
+    });
+    return result;
+  }
+
+  function currentSnapshot(data) {
+    return {
+      profile: pick(data.profile, ['name', 'tagline', 'bio']),
+      links: data.links.map(function (entry) { return pick(entry, ['title', 'url']); }),
+      todos: data.todos.map(function (entry) { return pick(entry, ['text', 'done', 'completedAt']); }),
+      scheduleWeek: data.scheduleWeek,
+      accounts: data.accounts.map(function (entry) { return pick(entry, ['site', 'user', 'pass', 'secret']); }),
+      birthdays: data.birthdays.map(function (entry) { return pick(entry, ['id', 'name', 'month', 'day', 'leap', 'note']); }),
+      personalEvents: data.personalEvents.map(function (entry) { return pick(entry, ['id', 'title', 'date', 'note']); }),
+      importedSchedule: data.importedSchedule && {
+        version: 1,
+        courses: data.importedSchedule.courses.map(function (course) {
+          return pick(course, ['name', 'teacher', 'day', 'periods', 'weeks', 'room', 'color', 'roomWeek10']);
+        })
+      },
+      library: data.library.map(function (entry) { return pick(entry, ['id', 'title', 'note', 'url']); }),
+      memory: data.memory,
+      chatHistory: data.chatHistory.map(function (entry) {
+        return {
+          id: entry.id, title: entry.title, updatedAt: entry.updatedAt,
+          messages: entry.messages.map(function (message) { return pick(message, ['role', 'content']); })
+        };
+      }),
+      theme: data.theme
+    };
   }
 
   function validateEnvelope(backup) {
     check(object(backup) && backup.format === 'Applexddd.backup', '备份文件');
-    if (backup.version !== 1) throw new Error('不支持此备份版本，请使用兼容版本的生活助理。');
+    if (backup.version !== 1 && backup.version !== 2) throw new Error('不支持此备份版本，请使用兼容版本的生活助理。');
     check(validTimestamp(backup.exportedAt), '备份时间');
-    return { format: 'Applexddd.backup', version: 1, exportedAt: backup.exportedAt, data: validateData(backup.data) };
+    var isCurrent = backup.version === 2;
+    validateLegacyData(backup.data, isCurrent ? currentKeys : legacyKeys);
+    if (isCurrent) validateCurrentData(backup.data);
+    var snapshot = isCurrent ? currentSnapshot(backup.data) : backup.data;
+    return {
+      format: 'Applexddd.backup', version: backup.version, exportedAt: backup.exportedAt,
+      data: JSON.parse(JSON.stringify(snapshot))
+    };
   }
 
   function create(data, exportedAt) {
-    return validateEnvelope({ format: 'Applexddd.backup', version: 1, exportedAt: exportedAt, data: data });
+    return validateEnvelope({ format: 'Applexddd.backup', version: 2, exportedAt: exportedAt, data: data });
   }
 
   function parse(source) {
@@ -130,7 +192,9 @@
   }
 
   function restore(storage, backup) {
-    var data = validateEnvelope(backup).data;
+    var validated = validateEnvelope(backup);
+    var data = validated.data;
+    var keys = validated.version === 2 ? currentKeys : legacyKeys;
     var previous = {};
     var next = {};
     try {
@@ -165,7 +229,7 @@
     }
   }
 
-  var api = { create: create, parse: parse, restore: restore };
+  var api = { create: create, parse: parse, restore: restore, isLibraryUrl: isLibraryUrl, isLinkUrl: validUrl };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.DataBackup = api;
 })(typeof window === 'object' ? window : globalThis);
