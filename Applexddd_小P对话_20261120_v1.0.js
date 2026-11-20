@@ -11,15 +11,15 @@
     const messageLimit = 32768;
     const requestLimit = 512 * 1024;
     const encoder = new TextEncoder();
-    const endpointKey = 'mingjunBackendUrl';
-    const profileKey = 'mingjunSelectedProfile';
+    const endpoint = 'https://api.deepseek.com/chat/completions';
+    const profilesKey = 'mingjunDeepSeekProfiles';
+    const profileKey = 'mingjunDeepSeekSelectedProfile';
+    const apiKeys = new Map();
     const pending = new Set();
     const failures = new Map();
     let activeId = null;
-    let address = readPreference(endpointKey);
     let selectedId = readPreference(profileKey);
-    let token = '';
-    let profiles = [];
+    let profiles = readProfiles();
     let editingId = null;
 
     task.innerHTML = `
@@ -74,38 +74,22 @@
     `;
 
     config.innerHTML = `
-      <section class="p-panel" aria-labelledby="p-connection-title">
-        <h2 id="p-connection-title">后端连接</h2>
-        <form class="p-panel-form" id="p-connect">
-          <label for="p-address">后端地址</label>
-          <input type="url" id="p-address" placeholder="https://…" autocapitalize="off" spellcheck="false" required>
-          <label for="p-token">后端访问凭证</label>
-          <input type="password" id="p-token" autocomplete="off" spellcheck="false">
-          <p class="p-hint">刷新页面后需要重新输入访问凭证。</p>
-          <div class="p-form-actions">
-            <button type="submit" class="p-primary">连接后端</button>
-            <button type="button" class="p-secondary" id="p-disconnect" hidden>断开连接</button>
-          </div>
-          <p id="p-connect-status" class="p-form-status" role="status"></p>
-        </form>
-      </section>
       <section class="p-panel" aria-labelledby="p-profiles-title">
         <div class="p-panel-header">
-          <h2 id="p-profiles-title">模型方案</h2>
-          <button type="button" class="p-secondary" id="p-add-profile" disabled>添加方案</button>
+          <h2 id="p-profiles-title">DeepSeek 模型</h2>
+          <button type="button" class="p-secondary" id="p-add-profile">添加方案</button>
         </div>
+        <p class="p-hint">消息和记忆会直接发送到 DeepSeek。API Key 仅在当前页面使用，刷新后需重新填写。</p>
         <p class="p-hint" id="p-profiles-hint"></p>
         <div id="p-profiles" class="p-profile-list"></div>
         <form class="p-panel-form p-profile-form" id="p-profile-form" hidden>
           <h3 id="p-profile-title"></h3>
           <label for="p-profile-name">方案名称</label>
           <input type="text" id="p-profile-name" maxlength="80" required>
-          <label for="p-profile-url">模型 API 地址</label>
-          <input type="url" id="p-profile-url" placeholder="https://…/v1" autocapitalize="off" spellcheck="false" required>
           <label for="p-profile-model">模型 ID</label>
           <input type="text" id="p-profile-model" maxlength="200" autocapitalize="off" spellcheck="false" required>
-          <label for="p-profile-key">模型 API Key</label>
-          <input type="password" id="p-profile-key" autocomplete="off" spellcheck="false">
+          <label for="p-profile-key">DeepSeek API Key</label>
+          <input type="password" id="p-profile-key" maxlength="4096" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="p-profile-key-hint">
           <p class="p-hint" id="p-profile-key-hint"></p>
           <div class="p-form-actions">
             <button type="submit" class="p-primary">保存方案</button>
@@ -149,18 +133,12 @@
     const messageForm = task.querySelector('#p-message-form');
     const messageInput = task.querySelector('#p-message');
     const send = task.querySelector('.p-send');
-    const connectForm = config.querySelector('#p-connect');
-    const addressInput = config.querySelector('#p-address');
-    const tokenInput = config.querySelector('#p-token');
-    const disconnect = config.querySelector('#p-disconnect');
-    const connectStatus = config.querySelector('#p-connect-status');
     const addProfile = config.querySelector('#p-add-profile');
     const profileHint = config.querySelector('#p-profiles-hint');
     const profileList = config.querySelector('#p-profiles');
     const profileForm = config.querySelector('#p-profile-form');
     const profileTitle = config.querySelector('#p-profile-title');
     const profileName = config.querySelector('#p-profile-name');
-    const profileUrl = config.querySelector('#p-profile-url');
     const profileModel = config.querySelector('#p-profile-model');
     const profileSecret = config.querySelector('#p-profile-key');
     const profileKeyHint = config.querySelector('#p-profile-key-hint');
@@ -175,6 +153,17 @@
         return localStorage.getItem(key) || '';
       } catch {
         return '';
+      }
+    }
+
+    function readProfiles() {
+      try {
+        const stored = JSON.parse(readPreference(profilesKey));
+        return Array.isArray(stored) ? stored
+          .filter(item => typeof item?.id === 'string' && typeof item.name === 'string' && typeof item.model === 'string')
+          .map(({ id, name, model }) => ({ id, name, model })) : [];
+      } catch {
+        return [];
       }
     }
 
@@ -273,7 +262,7 @@
       const chat = readHistory().find(item => item.id === activeId);
       const chatMessages = chat?.messages || [];
       const profile = selectedProfile();
-      const ready = Boolean(token && profile?.hasKey);
+      const ready = apiKeys.has(profile?.id);
       title.textContent = chat?.title || 'MingJun';
       modelLabel.textContent = ready ? profile.name : '配置模型';
       modelLink.classList.toggle('is-connected', ready);
@@ -336,51 +325,45 @@
       renderChat(true);
     }
 
-    function normalizedAddress(value) {
-      let url;
-      try {
-        url = new URL(value.trim());
-      } catch {
-        throw new Error('请输入完整的服务地址。');
-      }
-      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-      if (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) {
-        throw new Error('服务地址需要使用 HTTPS，本机开发可使用 HTTP。');
-      }
-      if (url.username || url.password || url.search || url.hash) {
-        throw new Error('服务地址不能包含凭证、查询参数或页面锚点。');
-      }
-      return url.href.replace(/\/+$/, '');
-    }
-
-    async function api(path, method = 'GET', body, session = { address, token }) {
+    async function requestDeepSeek(body, apiKey) {
       let response;
       try {
-        response = await fetch(`${session.address}${path}`, {
-          method,
-          body: body === undefined ? undefined : JSON.stringify(body),
+        response = await fetch(endpoint, {
+          method: 'POST',
+          body: JSON.stringify(body),
           headers: {
-            Authorization: `Bearer ${session.token}`,
-            ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
           },
           credentials: 'omit',
           cache: 'no-store',
           redirect: 'error',
           signal: AbortSignal.timeout(100000)
         });
-      } catch {
-        throw new Error('无法连接后端，请检查地址和网络后重试。');
+      } catch (error) {
+        throw new Error(error.name === 'TimeoutError'
+          ? 'DeepSeek 响应超时，请重试。' : '无法连接 DeepSeek，请检查网络后重试。');
+      }
+      if (!response.ok) {
+        await response.body?.cancel();
+        const errors = {
+          401: 'DeepSeek API Key 无效，请在配置中更新。',
+          402: 'DeepSeek 账户余额不足。',
+          403: 'DeepSeek 拒绝了请求，请检查 API Key 权限。',
+          429: 'DeepSeek 请求过于频繁，请稍后重试。'
+        };
+        throw new Error(errors[response.status] || `DeepSeek 请求失败（HTTP ${response.status}）。`);
       }
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) {
-        throw new Error(typeof data?.error === 'string' ? data.error : '后端返回异常，请检查连接。');
-      }
-      return data;
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || !content.trim()) throw new Error('DeepSeek 未返回文本，请重试。');
+      return content;
     }
 
     async function requestReply(chat) {
       const profile = selectedProfile();
-      if (!token || !profile?.hasKey || pending.has(chat.id)) return;
+      const apiKey = apiKeys.get(profile?.id);
+      if (!apiKey || pending.has(chat.id)) return;
       pending.add(chat.id);
       failures.delete(chat.id);
       renderChat(true);
@@ -390,18 +373,26 @@
         const recent = chat.messages.slice(-79)
           .filter(entry => entry && ['user', 'assistant'].includes(entry.role) && typeof entry.content === 'string')
           .map(({ role, content }) => ({ role, content: content.slice(0, messageLimit) }));
-        const body = { profileId: profile.id, memory: memoryText, messages: recent };
-        while (recent.length > 1 && (
-          recent[0].role !== 'user' || encoder.encode(JSON.stringify(body)).length > requestLimit
-        )) recent.shift();
-        const result = await api('/chat', 'POST', body);
-        if (typeof result.content !== 'string' || !result.content.trim()) {
-          throw new Error('模型返回了空回复，请重试。');
+        const identity = '默认身份：你是小P，明军的个人助手。';
+        const instructions = memoryText.trim()
+          ? `以下是用户保存的记忆和指令，在本应用内优先于默认身份及后续对话。\n\n${memoryText}\n\n${identity}`
+          : identity;
+        const body = {
+          model: profile.model,
+          thinking: { type: 'disabled' },
+          stream: false,
+          messages: [{ role: 'system', content: instructions }, ...recent]
+        };
+        while (body.messages.length > 2 && (
+          body.messages[1].role !== 'user' || encoder.encode(JSON.stringify(body)).length > requestLimit
+        )) {
+          body.messages.splice(1, 1);
         }
+        const content = await requestDeepSeek(body, apiKey);
         const chats = readHistory();
         const latestChat = chats.find(item => item.id === chat.id);
         if (latestChat && JSON.stringify(latestChat.messages) === JSON.stringify(chat.messages)) {
-          latestChat.messages.push({ role: 'assistant', content: result.content });
+          latestChat.messages.push({ role: 'assistant', content });
           saveHistory(latestChat, chats);
         }
       } catch (error) {
@@ -421,11 +412,9 @@
 
     function renderProfiles() {
       profileList.replaceChildren();
-      addProfile.disabled = !token;
-      disconnect.hidden = !token;
-      profileHint.textContent = !token ? '连接后端后可管理模型方案。' :
-        (profiles.length ? '' : '添加一个模型方案，即可开始使用小P。');
+      profileHint.textContent = profiles.length ? '' : '添加一个方案，即可开始使用小P。';
       for (const profile of profiles) {
+        const hasKey = apiKeys.has(profile.id);
         const row = document.createElement('article');
         row.className = 'p-profile-row';
         const description = document.createElement('div');
@@ -433,7 +422,7 @@
         name.textContent = profile.name;
         const detail = document.createElement('p');
         detail.className = 'p-hint';
-        detail.textContent = profile.hasKey ? profile.model : `${profile.model} · 待填写 API Key`;
+        detail.textContent = hasKey ? profile.model : `${profile.model} · 待填写 API Key`;
         description.append(name, detail);
         const actions = document.createElement('div');
         actions.className = 'p-profile-actions';
@@ -441,8 +430,8 @@
         select.type = 'button';
         select.className = 'p-secondary';
         select.dataset.useProfile = profile.id;
-        select.textContent = profile.id === selectedId ? '正在使用' : '使用';
-        select.disabled = profile.id === selectedId || !profile.hasKey;
+        select.textContent = profile.id === selectedId && hasKey ? '正在使用' : '使用';
+        select.disabled = profile.id === selectedId || !hasKey;
         const edit = document.createElement('button');
         edit.type = 'button';
         edit.className = 'p-secondary';
@@ -455,14 +444,14 @@
     }
 
     function showProfileForm(profile) {
+      const hasKey = apiKeys.has(profile?.id);
       editingId = profile?.id || null;
       profileTitle.textContent = profile ? '编辑方案' : '添加方案';
-      profileName.value = profile?.name || '';
-      profileUrl.value = profile?.baseUrl || '';
-      profileModel.value = profile?.model || '';
+      profileName.value = profile?.name || 'DeepSeek';
+      profileModel.value = profile?.model || 'deepseek-flash';
       profileSecret.value = '';
-      profileSecret.required = !profile?.hasKey;
-      profileKeyHint.textContent = profile?.hasKey ? '留空会继续使用已保存的 Key。' : 'Key 保存在后端。';
+      profileSecret.required = !hasKey;
+      profileKeyHint.textContent = hasKey ? '留空会继续使用本次已填写的 Key。' : '请输入你在 DeepSeek 开放平台创建的 API Key。';
       status(profileStatus, '');
       profileForm.hidden = false;
       profileName.focus();
@@ -478,7 +467,6 @@
       memorySize.textContent = `${memoryInput.value.length} / ${memoryLimit}`;
     }
 
-    addressInput.value = address;
     memoryInput.value = readMemory();
     updateMemorySize();
     renderChat();
@@ -518,8 +506,8 @@
       event.preventDefault();
       const content = messageInput.value.trim();
       if (!content || messageInput.disabled) return;
-      if (!token || !selectedProfile()?.hasKey) {
-        status(composerStatus, '请先连接后端并选择模型方案。', true);
+      if (!apiKeys.has(selectedProfile()?.id)) {
+        status(composerStatus, '请先在配置中填写 DeepSeek API Key。', true);
         modelLink.focus();
         return;
       }
@@ -556,56 +544,6 @@
       if (chat?.messages.at(-1)?.role === 'user') void requestReply(chat);
     });
 
-    connectForm.addEventListener('submit', async event => {
-      event.preventDefault();
-      const button = connectForm.querySelector('[type="submit"]');
-      const suppliedToken = tokenInput.value.trim();
-      const previousId = selectedId;
-      if (!suppliedToken) {
-        status(connectStatus, '请输入后端访问凭证。', true);
-        tokenInput.focus();
-        return;
-      }
-      try {
-        const nextAddress = normalizedAddress(addressInput.value);
-        button.disabled = true;
-        disconnect.disabled = true;
-        tokenInput.value = '';
-        status(connectStatus, '正在连接…');
-        const data = await api('/profiles', 'GET', undefined, { address: nextAddress, token: suppliedToken });
-        if (!Array.isArray(data.profiles)) throw new Error('后端返回的模型方案格式有误。');
-        if (address !== nextAddress) selectedId = '';
-        address = nextAddress;
-        token = suppliedToken;
-        profiles = data.profiles;
-        rememberPreference(endpointKey, address);
-        addressInput.value = address;
-        const nextId = selectedProfile()?.id || profiles.find(profile => profile.hasKey)?.id || '';
-        setProfile(nextId);
-        hideProfileForm();
-        status(profileStatus, '');
-        status(connectStatus, '已连接');
-        status(composerStatus, '');
-      } catch (error) {
-        selectedId = previousId;
-        status(connectStatus, error.message, true);
-      } finally {
-        button.disabled = false;
-        disconnect.disabled = false;
-      }
-    });
-
-    disconnect.addEventListener('click', () => {
-      token = '';
-      tokenInput.value = '';
-      profiles = [];
-      hideProfileForm();
-      status(profileStatus, '');
-      status(connectStatus, '已断开');
-      renderProfiles();
-      renderChat();
-    });
-
     addProfile.addEventListener('click', () => showProfileForm());
     config.querySelector('#p-cancel-profile').addEventListener('click', () => {
       hideProfileForm();
@@ -623,38 +561,35 @@
       }
     });
 
-    profileForm.addEventListener('submit', async event => {
+    profileForm.addEventListener('submit', event => {
       event.preventDefault();
-      if (!token) return;
-      const button = profileForm.querySelector('[type="submit"]');
-      const activeToken = token;
-      const activeAddress = address;
-      const savingId = editingId;
-      try {
-        const payload = {
-          name: profileName.value.trim(),
-          baseUrl: normalizedAddress(profileUrl.value),
-          model: profileModel.value.trim()
-        };
-        if (!payload.name || !payload.model) throw new Error('请填写方案名称和模型 ID。');
-        if (profileSecret.value.trim()) payload.apiKey = profileSecret.value.trim();
-        profileSecret.value = '';
-        button.disabled = true;
-        status(profileStatus, '正在保存…');
-        const path = savingId ? `/profiles/${encodeURIComponent(savingId)}` : '/profiles';
-        const { profile } = await api(path, savingId ? 'PATCH' : 'POST', payload);
-        if (activeToken !== token || activeAddress !== address) return;
-        if (!profile || typeof profile.id !== 'string') throw new Error('后端返回的模型方案格式有误。');
-        profiles = profiles.filter(item => item.id !== profile.id).concat(profile);
-        setProfile(savingId && selectedId ? selectedId : profile.id);
-        if (editingId === savingId) hideProfileForm();
-        status(profileStatus, '已保存方案。');
-        status(composerStatus, '');
-      } catch (error) {
-        if (activeToken === token && activeAddress === address) status(profileStatus, error.message, true);
-      } finally {
-        button.disabled = false;
+      const key = profileSecret.value.trim();
+      const name = profileName.value.trim();
+      const model = profileModel.value.trim();
+      if (!name || !model) {
+        status(profileStatus, '请填写方案名称和模型 ID。', true);
+        return;
       }
+      if ((key && !/^[\x21-\x7e]{1,4096}$/.test(key)) || (!key && !apiKeys.has(editingId))) {
+        status(profileStatus, '请输入有效的 DeepSeek API Key。', true);
+        return;
+      }
+
+      const profile = { id: editingId || crypto.randomUUID(), name, model };
+      const saved = readProfiles();
+      const next = editingId ? saved.map(item => item.id === editingId ? profile : item) : [...saved, profile];
+      try {
+        localStorage.setItem(profilesKey, JSON.stringify(next));
+      } catch {
+        status(profileStatus, '模型方案保存失败，请检查浏览器存储权限。', true);
+        return;
+      }
+      if (key) apiKeys.set(profile.id, key);
+      profiles = next;
+      setProfile(editingId && apiKeys.has(selectedId) ? selectedId : profile.id);
+      hideProfileForm();
+      status(profileStatus, '已保存方案，可以回到任务页对话。');
+      status(composerStatus, '');
     });
 
     memoryInput.addEventListener('input', () => {
